@@ -1,0 +1,22 @@
+# 运行时数据：数据库、任务文件、settings.json（含 API Key）
+data/
+
+# 环境变量 / 密钥
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# 打包产物
+*.zip
+
+# 系统文件
+.DS_Store
+
+# Claude Code 个人本地设置（项目 Skills 在 .claude/skills/ 下，需要提交）
+.claude/settings.local.json

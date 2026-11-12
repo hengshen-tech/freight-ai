@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>货代 AI 工作台</title>
+<style>
+:root{--ink:#1f1e1b;--ink2:#55524a;--mute:#8a867a;--line:#e4e0d4;--line2:#eeebe2;--bg:#f7f5ee;--side:#efece2;--card:#fffefb;
+--acc:#b9572f;--acc-soft:#f6e6dc;--ok:#2f6f5e;--ok-soft:#e3efe9;--warn:#96610a;--warn-soft:#f8ecd0;--bad:#a8321f;--bad-soft:#f8e2dc;--info:#3d5a80;--info-soft:#e6ecf3;
+--serif:"Source Serif 4","Noto Serif SC","Source Han Serif SC","Songti SC","STSong",Georgia,serif;
+--sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.6 var(--sans);color:var(--ink);background:var(--bg);display:flex;min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--acc)}
+nav{width:216px;background:var(--side);border-right:1px solid var(--line);padding:22px 14px;flex:none;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;margin:0 6px 26px}
+.brand i{width:30px;height:30px;border-radius:8px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:600 15px var(--serif);font-style:normal}
+.brand b{font:600 16px var(--serif);letter-spacing:.3px;display:block;line-height:1.2}.brand small{color:var(--mute);font-size:11px}
+nav a{display:block;padding:8px 12px;border-radius:8px;color:var(--ink2);text-decoration:none;cursor:pointer;margin-bottom:2px;transition:background .15s}
+nav a:hover{background:#e6e2d6;color:var(--ink)}nav a.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+nav .sep{margin:18px 12px 6px;font-size:11px;color:var(--mute);letter-spacing:1px}
+#health{margin-top:auto;padding:10px 12px;font-size:11px;line-height:1.7;color:var(--mute);border-top:1px solid var(--line)}
+#health b{color:var(--bad);font-weight:600}
+main{flex:1;padding:34px 40px 70px;min-width:0;max-width:1360px}
+h2{font:600 26px/1.25 var(--serif);margin:0 0 6px;letter-spacing:.2px}h3{font-size:14px;font-weight:600;margin:0 0 10px}
+.sub{color:var(--ink2);margin:0 0 24px;max-width:780px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px}
+.grid{display:grid;gap:18px}.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}.g31{grid-template-columns:minmax(0,2.5fr) minmax(0,1fr)}
+@media(max-width:1000px){.g4,.g2{grid-template-columns:1fr 1fr}.g31{grid-template-columns:1fr}nav{width:160px}main{padding:24px 20px 60px}}
+.kpi{padding:16px 20px}.kpi b{display:block;font:500 34px/1.1 var(--serif);font-variant-numeric:tabular-nums}.kpi span{color:var(--ink2);font-size:12px}
+.kpi.alert b{color:var(--bad)}.kpi.care b{color:var(--warn)}
+input,select,textarea,button{font:inherit;color:inherit}
+input[type=text],input[type=password],input[type=date],select,textarea{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;transition:border-color .15s,box-shadow .15s}
+textarea{resize:vertical;min-height:70px;line-height:1.6}
+input:focus,select:focus,textarea:focus{outline:0;border-color:#c9c3b2;box-shadow:0 0 0 3px #ece8dc}
+::placeholder{color:#aaa598}
+label{display:block;font-size:12px;color:var(--ink2);margin:12px 0 5px}
+button{cursor:pointer;white-space:nowrap;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 14px;transition:background .15s,border-color .15s}
+button:hover{border-color:#c9c3b2;background:#fff}
+button.pri{background:var(--ink);border-color:var(--ink);color:var(--bg);font-weight:500}button.pri:hover{background:#38362f;border-color:#38362f}
+button.sm{padding:3px 10px;font-size:12px;border-radius:7px}button:disabled{opacity:.45;cursor:default}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--mute);font-size:12px;padding:6px 8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td>b:first-child{white-space:nowrap}
+td{padding:10px 8px;border-bottom:1px solid var(--line2);vertical-align:top}tr:last-child td{border-bottom:0}
+.tag{display:inline-block;padding:1px 9px;border-radius:20px;font-size:12px;white-space:nowrap}
+.tag.error,.tag.low{background:var(--bad-soft);color:var(--bad)}.tag.warning,.tag.medium{background:var(--warn-soft);color:var(--warn)}
+.tag.info,.tag.running{background:var(--info-soft);color:var(--info)}.tag.high,.tag.done{background:var(--ok-soft);color:var(--ok)}.tag.plain{background:#edeae0;color:var(--ink2)}
+.steps{display:flex;gap:3px;margin-top:6px}.steps i{height:4px;flex:1;border-radius:2px;background:#e6e2d6}.steps i.on{background:var(--ok)}.steps i.ex{background:var(--bad)}
+.mute{color:var(--mute);font-size:12px}.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}.row>.fix{flex:none}
+.cmd{display:flex;gap:8px;margin-bottom:22px}.cmd input{padding:13px 16px;border-radius:12px;font-size:15px;background:var(--card)}.cmd button{border-radius:12px;padding:0 20px}
+.log{background:#262522;color:#d9d5c7;border-radius:10px;padding:14px 16px;font:12px/1.75 ui-monospace,"SF Mono",Menlo,Consolas,monospace;max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.log .review{color:#c9b3e6}.log .tool{color:#9fcdbd}.log .error,.log .result{color:#f0a594}.log .user{color:#e9c27c}.log .t{color:#7d796c;margin-right:8px}
+.drop{border:1.5px dashed #cfc9b8;border-radius:12px;padding:18px;text-align:center;color:var(--ink2);background:#fbfaf5;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover{border-color:var(--acc);background:#fff}.drop.has{border-style:solid;border-color:var(--ok);background:var(--ok-soft);color:var(--ink);text-align:left}
+.todo{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line2);align-items:flex-start}.todo:last-child{border:0}.todo input{margin-top:4px;accent-color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chips button{font-size:12px;border-radius:16px;padding:4px 12px;color:var(--ink2)}
+.banner{background:var(--warn-soft);color:#5e3d05;border:1px solid #ecd9a8;border-radius:12px;padding:11px 16px;margin-bottom:18px}
+a.dl{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:var(--bg);padding:7px 14px;border-radius:9px;text-decoration:none;font-weight:500;margin:0 8px 8px 0}a.dl:hover{background:#38362f}
+code{background:#edeae0;padding:1px 5px;border-radius:4px;font:12px ui-monospace,Menlo,Consolas,monospace}
+.hide{display:none}
+
+/* —— AI 助手 —— */
+main.chatmode{padding:0;max-width:none;display:flex;height:100vh}
+.convs{width:232px;flex:none;border-right:1px solid var(--line);padding:22px 12px;overflow-y:auto}
+.convs .new{width:100%;text-align:left;padding:9px 12px;margin-bottom:14px;font-weight:500}
+.convs .lbl{font-size:11px;color:var(--mute);letter-spacing:1px;margin:0 8px 6px}
+.conv{display:flex;align-items:center;gap:4px;padding:7px 8px 7px 12px;border-radius:8px;cursor:pointer;color:var(--ink2)}
+.conv:hover{background:#ece9df}.conv.on{background:var(--card);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.conv span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.conv button{border:0;background:none;padding:0 5px;color:var(--mute);visibility:hidden;font-size:15px;line-height:1}.conv:hover button{visibility:visible}.conv button:hover{color:var(--bad);background:none}
+.thread{flex:1;min-width:0;display:flex;flex-direction:column}
+.msgs{flex:1;overflow-y:auto;padding:36px 24px 12px}
+.msgs>*{max-width:780px;margin-left:auto;margin-right:auto}
+.empty{text-align:center;padding-top:9vh}
+.empty h2{font-size:32px;margin-bottom:10px}.empty p{color:var(--ink2);margin:0 0 30px}
+.sugs{display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left}
+.sug{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .15s}
+.sug:hover{border-color:#c9c3b2;transform:translateY(-1px)}.sug b{display:block;font-weight:600;margin-bottom:2px}.sug span{color:var(--mute);font-size:12px}
+.msg{margin-bottom:26px;display:flex}
+.msg.me{justify-content:flex-end}
+.ub{background:#ebe7da;border-radius:16px 16px 4px 16px;padding:10px 16px;max-width:82%;white-space:pre-wrap;word-break:break-word}
+.av{width:28px;height:28px;border-radius:8px;background:var(--acc);color:#fff;display:grid;place-items:center;font:600 13px var(--serif);flex:none;margin:1px 14px 0 0}
+.ab{flex:1;min-width:0;padding-top:2px}
+.fchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.fchip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px 10px;font-size:12px;color:var(--ink2);text-decoration:none}
+.fchip svg{flex:none;opacity:.6}.fchip button{border:0;background:none;padding:0 0 0 2px;color:var(--mute);font-size:14px;line-height:1}
+a.fchip.out{border-color:#cfdcd5;background:var(--ok-soft);color:var(--ok);font-weight:500;padding:6px 12px}a.fchip.out:hover{background:#d6e8df}
+.md{line-height:1.75;word-break:break-word}.md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 12px}.md h4{font:600 16px var(--serif);margin:18px 0 8px}.md ul,.md ol{margin:0 0 12px;padding-left:22px}.md li{margin:3px 0}
+.md pre{background:#262522;color:#d9d5c7;border-radius:10px;padding:12px 14px;overflow:auto;font:12px/1.7 ui-monospace,Menlo,Consolas,monospace;margin:0 0 12px}
+.md table{margin:0 0 12px;border:1px solid var(--line);border-radius:10px;border-collapse:separate;border-spacing:0;overflow:hidden;background:var(--card)}
+.md th{background:#f3f0e6;color:var(--ink2)}.md td,.md th{padding:7px 12px}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:10px;padding:10px 14px}
+details.trace{margin-top:10px;font-size:12px;color:var(--mute)}details.trace summary{cursor:pointer;display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:16px;list-style:none;user-select:none}
+details.trace summary::-webkit-details-marker{display:none}details.trace summary:hover{border-color:#c9c3b2;color:var(--ink2)}
+details.trace>div,.live{margin-top:8px;padding-left:12px;border-left:2px solid var(--line);line-height:1.9;color:var(--mute);font-size:12px}
+.dots{display:inline-flex;gap:4px;align-items:center;height:22px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--acc);animation:blink 1.2s infinite ease-in-out}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes blink{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.dots i{animation:none;opacity:.6}}
+.cwrap{padding:0 24px 22px}.cwrap>*{max-width:780px;margin-left:auto;margin-right:auto}
+.composer{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 12px 10px 16px;box-shadow:0 2px 14px rgba(60,50,30,.06);transition:border-color .15s,box-shadow .15s}
+.composer:focus-within{border-color:#c9c3b2;box-shadow:0 2px 18px rgba(60,50,30,.1)}.composer.drag{border-color:var(--acc);background:var(--acc-soft)}
+.composer textarea{border:0;padding:4px 0;min-height:28px;max-height:200px;resize:none;background:none;box-shadow:none!important;font-size:15px}
+.cbar{display:flex;align-items:center;gap:10px;margin-top:6px}.cbar .hint{flex:1;text-align:right}
+.icon{border:0;background:none;padding:6px;border-radius:8px;color:var(--ink2);display:grid;place-items:center}.icon:hover{background:#edeae0}
+.send{width:34px;height:34px;padding:0;border-radius:10px;background:var(--acc);border-color:var(--acc);color:#fff;display:grid;place-items:center}
+.send:hover{background:#a34a26;border-color:#a34a26}.send:disabled{background:#d9d4c6;border-color:#d9d4c6;opacity:1}
+#cerr{color:var(--bad);margin-top:8px;text-align:center;min-height:18px}
+@media(max-width:900px){.convs{display:none}.sugs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand"><i>货</i><div><b>货代工作台</b><small>AI 操作助手</small></div></div>
+  <a data-v="dash">工作台</a>
+  <a data-v="chat">AI 助手</a>
+  <div class="sep">AI 作业</div>
+  <a data-v="fill">报关单智能填制</a>
+  <a data-v="audit">单证一致性审核</a>
+  <a data-v="hs">HS 归类助手</a>
+  <div class="sep">记录与配置</div>
+  <a data-v="jobs">任务记录</a>
+  <a data-v="settings">设置</a>
+  <div id="health"></div>
+</nav>
+<main id="main"></main>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api = async (url, opt) => {
+  const r = await fetch(url, opt);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m } catch {} throw new Error(typeof m === 'string' ? m : JSON.stringify(m)); }
+  return r.json();
+};
+const post = (url, body) => api(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+let health = {}, shipments = [], timer = null, chatSession = null, chatLog = [];
+const KIND = {fill: '报关单填制', audit: '单证审核', hs: 'HS 归类'};
+const STATUS = {running: '进行中', done: '已完成', error: '失败'};
+
+function go(view, arg) {
+  clearInterval(timer); $('#main').onclick = null; $('#main').classList.remove('chatmode');
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === (view === 'memory' ? 'settings' : view === 'job' ? 'jobs' : view)));
+  ({dash: viewDash, fill: () => viewJobForm('fill', arg), audit: () => viewJobForm('audit', arg), hs: viewHS, chat: () => viewChat(arg), jobs: viewJobs, job: () => viewJob(arg), settings: viewSettings, memory: viewMemory})[view]();
+}
+document.querySelectorAll('nav a').forEach(a => a.onclick = () => go(a.dataset.v));
+
+async function loadHealth() {
+  health = await api('/api/health');
+  $('#health').innerHTML = (health.api_key ? '模型：' + esc(health.model || '默认') : '<b>未配置 API Key</b>');
+}
+
+/* ---------------- 工作台 ---------------- */
+async function viewDash() {
+  const d = await api('/api/dashboard'); shipments = d.shipments;
+  const k = d.kpi, n = new Date(), today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  $('#main').innerHTML = `
+  <h2>工作台</h2><p class="sub">今天要盯的票、要做的事，都在这里。也可以直接用一句话交给 AI。</p>
+  ${health.api_key ? '' : '<div class="banner">还没有配置模型的 API Key，AI 功能暂时不可用。<a href="#" onclick="go(\'settings\');return false">去设置</a></div>'}
+  <form class="cmd" id="cmd"><input type="text" placeholder="例如：新建一票出口，客户宁波恒益，宁波到汉堡，FOB，LED 灯具，下周五截关" autocomplete="off"><button class="pri fix">交给 AI</button></form>
+  <div class="grid g4">
+    <div class="card kpi"><b>${k.active}</b><span>在办运单</span></div>
+    <div class="card kpi care"><b>${k.to_declare}</b><span>待制单 / 待申报</span></div>
+    <div class="card kpi alert"><b>${k.cutoff_due}</b><span>已到截关日仍未放行</span></div>
+    <div class="card kpi alert"><b>${k.exception}</b><span>查验 / 异常</span></div>
+  </div>
+  <div class="grid g31">
+    <div class="card"><div class="row"><h3>运单</h3><button class="sm fix" id="newShip">新建运单</button></div>
+      <div id="shipForm" class="hide"></div>
+      <table><thead><tr><th>编号</th><th>客户 / 货物</th><th>航线</th><th>截关</th><th style="width:26%">进度</th><th></th></tr></thead><tbody>
+      ${d.shipments.map(s => `<tr>
+        <td><b>${esc(s.ref)}</b><div class="mute">${s.direction === 'import' ? '进口' : '出口'} · ${esc(s.mode || '')} ${esc(s.incoterm || '')}</div></td>
+        <td>${esc(s.customer || '')}<div class="mute">${esc(s.goods || '')}</div></td>
+        <td>${esc(s.pol || '')} → ${esc(s.pod || '')}</td>
+        <td style="white-space:nowrap">${s.cutoff ? (s.cutoff <= today && s.stage_index < 4 ? `<span class="tag error">${esc(s.cutoff.slice(5))}</span>` : esc(s.cutoff.slice(5))) : '<span class="mute">—</span>'}</td>
+        <td>${esc(s.status)} ${s.exception ? `<span class="tag error">${esc(s.exception)}</span>` : ''}
+          <div class="steps">${s.stages.map((_, i) => `<i class="${i <= s.stage_index ? (s.exception ? 'ex' : 'on') : ''}"></i>`).join('')}</div></td>
+        <td style="white-space:nowrap"><button class="sm" data-fill="${s.id}">制单</button> <button class="sm" data-adv="${s.id}" ${s.status === '完成' ? 'disabled' : ''}>下一步</button> <button class="sm" data-del="${s.id}" title="删除">×</button></td>
+      </tr>`).join('') || '<tr><td colspan="6" class="mute">还没有运单</td></tr>'}
+      </tbody></table></div>
+    <div class="card"><h3>待办</h3>
+      ${d.todos.map(t => `<div class="todo"><input type="checkbox" data-todo="${t.id}"><div>${esc(t.text)}<div class="mute">${esc(t.ref || '')}</div></div></div>`).join('') || '<p class="mute">没有待办</p>'}
+    </div>
+  </div>`;
+  $('#cmd').onsubmit = e => { e.preventDefault(); const v = $('#cmd input').value.trim(); if (v) go('chat', v); };
+  $('#main').onclick = async e => {
+    const b = e.target.dataset;
+    if (b.fill) go('fill', b.fill);
+    else if (b.adv) { await post(`/api/shipments/${b.adv}/advance`); viewDash(); }
+    else if (b.del) { if (confirm('删除这票运单？')) { await api(`/api/shipments/${b.del}`, {method: 'DELETE'}); viewDash(); } }
+    else if (b.todo) { await post(`/api/todos/${b.todo}/toggle`); viewDash(); }
+  };
+  $('#newShip').onclick = () => {
+    const f = $('#shipForm'); f.classList.toggle('hide');
+    f.innerHTML = `<form class="card" style="background:#fafaf8"><div class="grid g4">
+      ${[['customer', '客户'], ['counterparty', '境外收/发货人'], ['pol', '起运港'], ['pod', '目的港'], ['goods', '货物'], ['incoterm', '成交方式']].map(([n, l]) => `<div><label>${l}</label><input type="text" name="${n}"></div>`).join('')}
+      <div><label>方向</label><select name="direction"><option value="export">出口</option><option value="import">进口</option></select></div>
+      <div><label>截关日</label><input type="date" name="cutoff"></div></div>
+      <div style="margin-top:12px"><button class="pri">保存</button></div></form>`;
+    $('form', f).onsubmit = async e => { e.preventDefault(); try { await post('/api/shipments', Object.fromEntries(new FormData(e.target))); viewDash(); } catch (err) { alert(err.message) } };
+  };
+}
+
+/* ---------------- 报关填制 / 单证审核 ---------------- */
+async function viewJobForm(kind, shipId) {
+  if (!shipments.length) shipments = (await api('/api/dashboard')).shipments;
+  const fill = kind === 'fill';
+  $('#main').innerHTML = `
+  <h2>${fill ? '报关单智能填制' : '单证一致性审核'}</h2>
+  <p class="sub">${fill ? '上传客户发来的发票、箱单、合同等 Excel，再给一份报关模板。Agent 用 xlsx Skill 读取所有文件、把数据填进模板，并逐项标注来源和把握程度。'
+    : '上传一套单证，Agent 实际计算并交叉核对金额、数量、件数、重量、抬头、条款，列出所有不一致。'}</p>
+  <form class="card" id="jf"><div class="grid g2">
+    <div><h3>1. 原始单证（可多选）</h3><div class="drop" id="dFiles">点击选择文件，或把文件拖到这里<br><span class="mute">xlsx / xls / csv / pdf / 图片</span></div><input type="file" id="files" multiple hidden>
+      ${fill ? `<h3 style="margin-top:16px">2. 报关模板</h3><div class="drop" id="dTpl">点击选择要填写的模板 Excel</div><input type="file" id="tpl" hidden accept=".xlsx,.xlsm,.xls">
+      ${health.sample_template ? '<label style="font-size:13px;color:inherit"><input type="checkbox" id="useSample"> 没有模板？先用内置的示例报关单模板</label>' : ''}` : ''}
+    </div>
+    <div><h3>${fill ? '3' : '2'}. 关联运单与要求（可选）</h3>
+      <label>关联运单</label><select id="ship"><option value="">不关联</option>${shipments.map(s => `<option value="${s.id}" ${String(s.id) === String(shipId) ? 'selected' : ''}>${esc(s.ref)} · ${esc(s.customer || '')}</option>`).join('')}</select>
+      ${fill ? '<label>客户（可不填，AI 会从单证里识别）</label><input type="text" id="cust" placeholder="例如：宁波恒益电器" autocomplete="off">' : ''}
+      <label>给 AI 的补充要求</label><textarea id="ins" placeholder="${fill ? '例如：监管方式按一般贸易；运费 1200 美元；同品名合并申报' : '例如：重点核对净重和毛重'}"></textarea>
+      <div style="margin-top:14px"><button class="pri" id="go">${fill ? '开始填制' : '开始审核'}</button> <span class="mute" id="err"></span></div>
+    </div></div></form>
+  <p class="mute">想先试试？项目的 samples/ 目录里有一套虚构的样例发票、箱单、合同。</p>`;
+  const bind = (drop, input, multi) => {
+    const show = () => { const fs = [...input.files]; drop.classList.toggle('has', !!fs.length); if (fs.length) drop.innerHTML = fs.map(f => '· ' + esc(f.name)).join('<br>'); };
+    drop.onclick = () => input.click(); input.onchange = show;
+    drop.ondragover = e => e.preventDefault();
+    drop.ondrop = e => { e.preventDefault(); const dt = new DataTransfer(); [...e.dataTransfer.files].slice(0, multi ? 99 : 1).forEach(f => dt.items.add(f)); input.files = dt.files; show(); };
+  };
+  bind($('#dFiles'), $('#files'), true); if (fill) bind($('#dTpl'), $('#tpl'), false);
+  if (fill) { const sync = () => { const sh = shipments.find(x => String(x.id) === $('#ship').value); if (sh && sh.customer) $('#cust').value = sh.customer; }; $('#ship').onchange = sync; sync(); }
+  $('#jf').onsubmit = async e => {
+    e.preventDefault(); const fd = new FormData(); fd.append('kind', kind); fd.append('instructions', $('#ins').value);
+    if ($('#ship').value) fd.append('shipment_id', $('#ship').value);
+    [...$('#files').files].forEach(f => fd.append('files', f));
+    if (fill) { fd.append('customer', $('#cust').value); if ($('#tpl').files[0]) fd.append('template', $('#tpl').files[0]); if ($('#useSample')?.checked) fd.append('use_sample_template', 'true'); }
+    $('#go').disabled = true;
+    try { const j = await api('/api/jobs', {method: 'POST', body: fd}); go('job', j.id); }
+    catch (err) { $('#err').innerHTML = esc(err.message) + (/Key/.test(err.message) ? ' <a href="#" onclick="go(\'settings\');return false">去设置</a>' : ''); $('#go').disabled = false; }
+  };
+}
+
+/* ---------------- HS 归类 ---------------- */
+function viewHS() {
+  $('#main').innerHTML = `
+  <h2>HS 归类助手</h2><p class="sub">描述商品，Agent 给出候选编码、归类依据、申报要素和监管条件。结果仅供参考，需报关员复核。</p>
+  <form class="card" id="hf"><label>商品信息（品名、材质/成分、用途、工作原理、规格，越具体越准）</label>
+  <textarea id="desc" style="min-height:110px" placeholder="例如：LED 面板灯，600x600mm，40W，铝框+PS 扩散板，自带恒流驱动，用于办公室吊顶照明"></textarea>
+  <div style="margin-top:12px"><button class="pri" id="go">开始归类</button> <span class="mute" id="err"></span></div></form>`;
+  $('#hf').onsubmit = async e => {
+    e.preventDefault(); const fd = new FormData(); fd.append('kind', 'hs'); fd.append('instructions', $('#desc').value);
+    $('#go').disabled = true;
+    try { const j = await api('/api/jobs', {method: 'POST', body: fd}); go('job', j.id); }
+    catch (err) { $('#err').innerHTML = esc(err.message) + (/Key/.test(err.message) ? ' <a href="#" onclick="go(\'settings\');return false">去设置</a>' : ''); $('#go').disabled = false; }
+  };
+}
+
+/* ---------------- 任务详情 ---------------- */
+function logHtml(events) {
+  return events.map(e => `<div class="${e.kind}"><span class="t">${e.t}</span>${e.kind === 'tool' ? '▸ ' : e.kind === 'user' ? '操作员：' : ''}${esc(e.text)}</div>`).join('') || '<span class="t">Agent 启动中…</span>';
+}
+function reviewHtml(rv) {
+  if (!rv) return '';
+  const V = {pass: ['done', '复核通过'], warn: ['warning', '需人工确认'], fail: ['error', '复核发现错误']}[rv.verdict] || ['plain', rv.verdict];
+  const S = {error: ['error', '错误'], warn: ['warning', '需确认'], ok: ['done', '无误']};
+  const row = c => `<tr><td style="width:70px"><span class="tag ${S[c.status][0]}">${S[c.status][1]}</span></td><td style="width:22%">${esc(c.item)}${c.cell ? `<div class="mute">${esc(c.cell)}</div>` : ''}</td><td>${esc(c.detail)}</td><td class="mute" style="width:70px">${esc(c.by || '')}</td></tr>`;
+  const bad = rv.checks.filter(c => c.status !== 'ok'), ok = rv.checks.filter(c => c.status === 'ok');
+  return `<div class="card"><h3>独立复核 <span class="tag ${V[0]}" style="margin-left:6px;font-weight:400">${V[1]}</span>${rv.rounds ? ` <span class="tag plain" style="font-weight:400">已自动改正 ${rv.rounds} 轮后重新复核</span>` : ''}</h3>
+    <div style="margin-bottom:10px">${esc(rv.summary)}</div>
+    ${bad.length ? `<table><tbody>${bad.map(row).join('')}</tbody></table>` : ''}
+    ${ok.length ? `<details class="trace"><summary>另有 ${ok.length} 项核对无误</summary><table style="margin-top:8px"><tbody>${ok.map(row).join('')}</tbody></table></details>` : ''}</div>`;
+}
+function resultHtml(j) {
+  const r = j.result || {}, lv = {error: '错误', warning: '需确认', info: '说明'}, cf = {high: '高', medium: '中', low: '低'};
+  const issues = (r.issues || []).slice().sort((a, b) => 'ewi'.indexOf((a.level || 'i')[0]) - 'ewi'.indexOf((b.level || 'i')[0]));
+  return `
+  ${j.status === 'error' ? `<div class="card" style="border-color:var(--bad)"><h3 style="color:var(--bad)">任务失败</h3>${esc(j.error)}</div>` : ''}
+  ${r.summary ? `<div class="card"><h3>结论</h3><div style="white-space:pre-wrap">${esc(r.summary)}</div>
+    <div style="margin-top:12px">${(r.output_files || []).map(f => { const n = f.split('/').pop(); return `<a class="dl" href="/api/jobs/${j.id}/files/${encodeURIComponent(n)}">下载 ${esc(n)}</a>` }).join('')}</div>
+    ${j.kind === 'fill' && j.status === 'done' && (r.output_files || []).length ? (j.confirmed ? '<div style="margin:4px 0 10px"><span class="tag done">已确认无误</span></div>' : '<div style="margin:4px 0 10px"><button class="fix" id="confirmBtn">确认无误</button> <span class="mute">' + (j.review && j.review.verdict === 'fail' ? '<span style="color:var(--bad)">独立复核仍有未解决的错误，请先处理再确认。</span>' : '人工复核后点一下，标记这份报关单已核对。') + '</span></div>') : ''}
+    ${j.cost_usd != null ? `<div class="mute">本次用量约 $${Number(j.cost_usd).toFixed(3)}</div>` : ''}</div>` : ''}
+  ${reviewHtml(j.review)}
+  ${issues.length ? `<div class="card"><h3>问题清单（${issues.length}）</h3><table><tbody>${issues.map(i => `<tr><td style="width:70px"><span class="tag ${esc(i.level)}">${lv[i.level] || esc(i.level)}</span></td><td>${esc(i.message)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+  ${(r.candidates || []).length ? `<div class="card"><h3>候选编码</h3><table><thead><tr><th>编码</th><th>品名</th><th>归类依据</th><th>申报要素</th><th>监管 / 备注</th><th>把握</th></tr></thead><tbody>
+    ${r.candidates.map(c => `<tr><td><b>${esc(c.hs_code)}</b></td><td>${esc(c.name)}</td><td>${esc(c.reason)}</td><td>${esc(c.elements)}</td><td>${esc(c.supervision)}</td><td><span class="tag ${esc(c.confidence)}">${cf[c.confidence] || esc(c.confidence)}</span></td></tr>`).join('')}</tbody></table></div>` : ''}
+  ${(r.fields || []).length ? `<div class="card"><h3>${j.kind === 'audit' ? '关键数据对照' : '已填栏位'}（${r.fields.length}）</h3><table><thead><tr><th>栏位</th><th>单元格</th><th>值</th><th>来源</th><th>把握</th></tr></thead><tbody>
+    ${r.fields.map(f => `<tr><td>${esc(f.field)}</td><td class="mute">${esc(f.cell)}</td><td>${esc(f.value)}</td><td class="mute">${esc(f.source)}</td><td>${f.confidence ? `<span class="tag ${esc(f.confidence)}">${cf[f.confidence] || esc(f.confidence)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+}
+async function viewJob(id) {
+  $('#main').innerHTML = `<h2 id="jt">任务</h2><p class="sub" id="js" style="margin-bottom:8px"></p><p id="jc" style="margin:0 0 20px"></p><div id="jr"></div>
+  <form class="card hide" id="fu"><h3>让 AI 继续修改</h3><div class="row"><input type="text" placeholder="例如：运费按 1200 美元填；第 2、3 项合并申报；重新出一份" autocomplete="off"><button class="pri fix">发送</button></div><div class="mute" id="fuErr"></div></form>
+  <div class="card"><h3>Agent 执行过程</h3><div class="log" id="jl"></div></div>`;
+  $('#fu').onsubmit = async e => { e.preventDefault(); const i = $('#fu input'), v = i.value.trim(); if (!v) return;
+    try { await post(`/api/jobs/${id}/followup`, {message: v}); i.value = ''; $('#fu').classList.add('hide'); $('#jr').innerHTML = ''; clearInterval(timer); await tick(); timer = setInterval(() => tick().catch(() => {}), 1500); }
+    catch (err) { $('#fuErr').textContent = err.message; } };
+  const tick = async () => {
+    const j = await api('/api/jobs/' + id);
+    $('#jt').textContent = j.title;
+    $('#js').innerHTML = `<span class="tag ${j.status === 'error' ? 'error' : j.status}">${STATUS[j.status]}</span> ${esc(j.created.replace('T', ' '))}` + (j.status === 'running' ? ' · Agent 正在处理，通常需要一到几分钟，可以离开本页稍后在「任务记录」查看' : '');
+    const log = $('#jl'), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+    log.innerHTML = logHtml(j.events); if (stick) log.scrollTop = log.scrollHeight;
+    if (j.kind !== 'hs') { const src = {ai: 'AI 根据单证识别' + (j.customer_basis ? '：' + j.customer_basis : ''), operator: '人工指定'}[j.customer_source] || '';
+      if (!$('#jc input') || document.activeElement !== $('#jc input')) $('#jc').innerHTML = `客户：<b>${j.customer ? esc(j.customer) : '未识别'}</b>${src && j.customer ? ` <span class="mute">（${esc(src)}）</span>` : ''} <a href="#" id="jcEdit" style="font-size:12px">更正</a>`;
+      const jce = $('#jcEdit'); if (jce) jce.onclick = e => { e.preventDefault(); $('#jc').innerHTML = `<span class="row" style="max-width:460px"><input type="text" list="jcl" value="${esc(j.customer || '')}" placeholder="客户名" autocomplete="off"><datalist id="jcl"></datalist><button class="sm fix pri">保存</button><button class="sm fix" type="button">取消</button></span>`;
+        api('/api/customers').then(l => { const d = $('#jcl'); if (d) d.innerHTML = l.map(c => `<option value="${esc(c)}">`).join(''); }).catch(() => {});
+        const [ok, no] = $('#jc').querySelectorAll('button'), inp = $('#jc input'); inp.focus();
+        no.onclick = () => { inp.blur(); $('#jc').innerHTML = ''; tick(); };
+        ok.onclick = async () => { try { await post(`/api/jobs/${id}/customer`, {customer: inp.value}); inp.blur(); $('#jc').innerHTML = ''; tick(); } catch (err) { $('#fuErr').textContent = err.message; } }; }; }
+    if (j.status !== 'running') { clearInterval(timer); $('#jr').innerHTML = resultHtml(j); $('#fu').classList.remove('hide');
+      const cb = $('#confirmBtn'); if (cb) cb.onclick = async () => { cb.disabled = true;
+        try { const nj = await post(`/api/jobs/${id}/confirm`); $('#jr').innerHTML = resultHtml(nj); }
+        catch (err) { cb.disabled = false; $('#fuErr').textContent = err.message; } }; }
+  };
+  await tick(); timer = setInterval(() => tick().catch(() => {}), 1500);
+}
+async function viewJobs(keep) {
+  const jobs = await api('/api/jobs');
+  const custs = [...new Set(jobs.map(j => j.customer).filter(Boolean))].sort();
+  const f = keep || {q: '', c: '', k: ''};
+  $('#main').innerHTML = `<h2>任务记录</h2><p class="sub">所有 AI 任务的结果和执行过程都留档，可以按客户查看。</p>
+  <div class="row" style="margin-bottom:14px;max-width:820px">
+    <select id="fc"><option value="">全部客户</option>${custs.map(c => `<option ${c === f.c ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="-" ${f.c === '-' ? 'selected' : ''}>未识别客户</option></select>
+    <select id="fk"><option value="">全部类型</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${k === f.k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <input type="text" id="fq" placeholder="搜索任务、结论…" value="${esc(f.q)}" autocomplete="off"></div>
+  <div class="card"><table><thead><tr><th>时间</th><th>客户</th><th>类型</th><th>任务</th><th>状态</th><th>结论</th></tr></thead><tbody id="jrows"></tbody></table></div>`;
+  const draw = () => {
+    const q = $('#fq').value.trim().toLowerCase(), c = $('#fc').value, k = $('#fk').value;
+    const rows = jobs.filter(j => (!c || (c === '-' ? !j.customer : j.customer === c)) && (!k || j.kind === k) && (!q || [j.title, j.summary, j.customer, j.error].join(' ').toLowerCase().includes(q)));
+    $('#jrows').innerHTML = rows.map(j => `<tr style="cursor:pointer" data-id="${j.id}"><td class="mute" style="white-space:nowrap">${esc(j.created.slice(5).replace('T', ' '))}</td>
+      <td>${j.customer ? esc(j.customer) : '<span class="mute">—</span>'}</td><td><span class="tag plain">${KIND[j.kind]}</span></td><td>${esc(j.title)}</td>
+      <td><span class="tag ${j.status === 'error' ? 'error' : j.status}">${STATUS[j.status]}</span>${j.review ? ` <span class="tag ${{pass: 'done', warn: 'warning', fail: 'error'}[j.review.verdict]}">${{pass: '复核通过', warn: '需确认', fail: '复核有错'}[j.review.verdict]}</span>` : ''}</td>
+      <td class="mute">${esc(j.summary || j.error || '')}</td></tr>`).join('') || '<tr><td colspan="6" class="mute">没有符合条件的任务</td></tr>';
+  };
+  ['fc', 'fk'].forEach(id => $('#' + id).onchange = draw); $('#fq').oninput = draw; draw();
+  $('#main').onclick = e => { const tr = e.target.closest('tr[data-id]'); if (tr) go('job', tr.dataset.id); };
+}
+
+/* ---------------- AI 助手（对话） ---------------- */
+const IC = {
+  clip: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.9-8.9a3.7 3.7 0 015.2 5.2l-8.8 8.8a1.8 1.8 0 01-2.6-2.6l8.1-8.1"/></svg>',
+  up: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  file: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg>',
+  down: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>',
+};
+function md(src) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  const LIST = /^\s*([-*•]|\d+[.、)])\s+/, ROW = /^\s*\|.*\|\s*$/;
+  const lines = String(src || '').replace(/\r/g, '').split('\n'), out = [];
+  let i = 0, m;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^```/.test(l)) { const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); i++; out.push('<pre>' + esc(buf.join('\n')) + '</pre>'); continue; }
+    if (ROW.test(l) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()), head = cells(l), body = [];
+      i += 2; while (i < lines.length && ROW.test(lines[i])) body.push(cells(lines[i++]));
+      out.push('<table><thead><tr>' + head.map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>' + body.map(r => '<tr>' + r.map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>'); continue;
+    }
+    if ((m = l.match(/^#{1,4}\s+(.*)/))) { out.push('<h4>' + inline(m[1]) + '</h4>'); i++; continue; }
+    if (LIST.test(l)) { const ord = /^\s*\d/.test(l), items = []; while (i < lines.length && LIST.test(lines[i])) items.push(lines[i++].replace(LIST, ''));
+      out.push((ord ? '<ol>' : '<ul>') + items.map(x => '<li>' + inline(x) + '</li>').join('') + (ord ? '</ol>' : '</ul>')); continue; }
+    if (!l.trim()) { i++; continue; }
+    const para = [l]; i++;
+    while (i < lines.length && lines[i].trim() && !/^```|^#{1,4}\s/.test(lines[i]) && !LIST.test(lines[i]) && !ROW.test(lines[i])) para.push(lines[i++]);
+    out.push('<p>' + para.map(inline).join('<br>') + '</p>');
+  }
+  return out.join('');
+}
+const newConv = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function convId(set) {
+  if (set) { window._conv = set; try { localStorage.setItem('conv', set) } catch {} return set; }
+  if (!window._conv) { let c = null; try { c = localStorage.getItem('conv') } catch {} window._conv = c || newConv(); try { localStorage.setItem('conv', window._conv) } catch {} }
+  return window._conv;
+}
+const SUGS = [
+  ['今天先处理哪几票？', '按截关日和异常情况排个优先级', '现在有哪些票需要我优先处理？按紧急程度排一下，并说明原因。'],
+  ['根据单证新建运单', '附上发票、箱单或合同，自动提取信息建单', '根据我上传的单证新建一票运单，并告诉我还缺哪些信息。'],
+  ['填一份报关单', '附上单证和模板，填好后给我下载', '用我上传的单证填一份报关单。'],
+  ['审一下这套单证', '核对金额、数量、件重、抬头是否一致', '帮我审核上传的这套单证是否单单一致。'],
+];
+async function viewChat(first) {
+  let conv = convId(), msgs = [], pending = null, busy = false, picked = [];
+  $('#main').classList.add('chatmode');
+  $('#main').innerHTML = `
+  <aside class="convs"><button class="new" id="newc">＋ 新对话</button><div class="lbl">最近</div><div id="clist"></div></aside>
+  <section class="thread">
+    <div class="msgs" id="msgs"></div>
+    <div class="cwrap">
+      <div class="composer" id="composer">
+        <div class="fchips" id="att" style="margin:0 0 6px"></div>
+        <textarea id="ctext" rows="1" placeholder="交代一件事，或把单证拖到这里…"></textarea>
+        <div class="cbar"><button type="button" class="icon" id="clip" title="上传单证" aria-label="上传单证">${IC.clip}</button><input type="file" id="cfile" multiple hidden>
+          <span class="mute hint">Enter 发送 · Shift+Enter 换行</span><button type="button" class="send" id="csend" aria-label="发送">${IC.up}</button></div>
+      </div>
+      <div class="mute" id="cerr"></div>
+    </div>
+  </section>`;
+  const alive = () => !!$('#composer');
+  const chip = n => `<span class="fchip">${IC.file}${esc(n)}</span>`;
+  const trace = steps => steps.length ? `<details class="trace"><summary>执行了 ${steps.length} 步</summary><div>${steps.map(esc).join('<br>')}</div></details>` : '';
+  const bubble = m => {
+    const files = m.files || [];
+    if (m.role === 'user') return `<div class="msg me"><div class="ub">${esc(m.text)}${files.length ? `<div class="fchips">${files.map(chip).join('')}</div>` : ''}</div></div>`;
+    return `<div class="msg ai"><div class="av">货</div><div class="ab">${m.error ? `<div class="err">${esc(m.text)}</div>` : `<div class="md">${md(m.text)}</div>`}`
+      + (files.length ? `<div class="fchips">${files.map(f => `<a class="fchip out" href="/api/chat/${conv}/files/${encodeURIComponent(f)}">${IC.down}${esc(f)}</a>`).join('')}</div>` : '')
+      + trace(m.steps || []) + '</div></div>';
+  };
+  const render = () => { if (!alive()) return;
+    const box = $('#msgs');
+    if (!msgs.length && !pending) box.innerHTML = `<div class="empty"><h2>今天要处理什么？</h2><p>直接说事情，或者把单证拖进来。查票、建单、审单、填报关单都可以。</p>
+      <div class="sugs">${SUGS.map((s, i) => `<div class="sug" data-sug="${i}"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('')}</div></div>`;
+    else box.innerHTML = msgs.map(bubble).join('') + (pending ? `<div class="msg ai"><div class="av">货</div><div class="ab"><span class="dots"><i></i><i></i><i></i></span>${pending.length ? `<div class="live">${pending.map(esc).join('<br>')}</div>` : ''}</div></div>` : '');
+    $('#csend').disabled = busy; box.scrollTop = box.scrollHeight; };
+  const drawAtt = () => { $('#att').innerHTML = picked.map((f, i) => `<span class="fchip">${IC.file}${esc(f.name)}<button type="button" data-rm="${i}" aria-label="移除">×</button></span>`).join(''); };
+  const addFiles = fs => { for (const f of fs) if (!picked.some(p => p.name === f.name && p.size === f.size)) picked.push(f); drawAtt(); };
+  const loadList = async () => { let list = []; try { list = await api('/api/chats') } catch {} if (!alive()) return;
+    $('#clist').innerHTML = list.map(c => `<div class="conv ${c.id === conv ? 'on' : ''}" data-conv="${esc(c.id)}"><span>${esc(c.title)}</span><button data-delconv="${esc(c.id)}" title="删除" aria-label="删除对话">×</button></div>`).join('') || '<div class="mute" style="padding:4px 8px">还没有对话</div>'; };
+  const reload = async () => { const d = await api('/api/chat/' + conv); msgs = d.messages; return d.running_job; };
+  const follow = async jid => { busy = true; pending = []; render();
+    for (;;) { let j; try { j = await api('/api/jobs/' + jid) } catch { break }
+      pending = j.events.filter(e => e.kind === 'tool').map(e => e.text).slice(-5); render();
+      if (j.status !== 'running') break; await new Promise(r => setTimeout(r, 1200)); if (!alive()) return; }
+    pending = null; busy = false; try { await reload() } catch {} render(); loadList(); };
+  const send = async text => { if (busy || (!text && !picked.length)) return;
+    const fd = new FormData(); fd.append('message', text); fd.append('conv', conv); picked.forEach(f => fd.append('files', f));
+    $('#cerr').textContent = ''; busy = true; render();
+    try { const j = await api('/api/chat', {method: 'POST', body: fd});
+      msgs.push({role: 'user', text, files: picked.map(f => f.name)}); picked = []; drawAtt(); const t = $('#ctext'); t.value = ''; t.style.height = 'auto'; await follow(j.id); }
+    catch (err) { busy = false; $('#cerr').innerHTML = esc(err.message) + (/Key/.test(err.message) ? ' <a href="#" onclick="go(\'settings\');return false">去设置</a>' : ''); render(); } };
+  const open = async id => { if (busy) return; conv = convId(id); msgs = []; picked = []; drawAtt(); $('#cerr').textContent = '';
+    let run = null; try { run = await reload() } catch {} render(); loadList(); if (run) follow(run); else $('#ctext').focus(); };
+
+  const ta = $('#ctext');
+  ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'; };
+  ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(ta.value.trim()); } };
+  $('#csend').onclick = () => send(ta.value.trim());
+  $('#clip').onclick = () => $('#cfile').click();
+  $('#cfile').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
+  const cp = $('#composer');
+  cp.ondragover = e => { e.preventDefault(); cp.classList.add('drag'); };
+  cp.ondragleave = () => cp.classList.remove('drag');
+  cp.ondrop = e => { e.preventDefault(); cp.classList.remove('drag'); addFiles([...e.dataTransfer.files]); };
+  $('#newc').onclick = () => open(newConv());
+  $('#main').onclick = async e => { const d = e.target.closest('[data-sug],[data-rm],[data-delconv],[data-conv]')?.dataset; if (!d) return;
+    if (d.rm !== undefined) { picked.splice(+d.rm, 1); drawAtt(); }
+    else if (d.sug !== undefined) { ta.value = SUGS[+d.sug][2]; ta.oninput(); if (picked.length || +d.sug === 0) send(ta.value); else ta.focus(); }
+    else if (d.delconv) { if (!confirm('删除这个对话？对话里上传和生成的文件也会删除。')) return;
+      try { await api('/api/chats/' + encodeURIComponent(d.delconv), {method: 'DELETE'}); } catch (err) { $('#cerr').textContent = err.message; return; }
+      if (d.delconv === conv) open(newConv()); else loadList(); }
+    else if (d.conv && d.conv !== conv) open(d.conv); };
+
+  let run = null; try { run = await reload() } catch {}
+  render(); loadList();
+  if (run) await follow(run);
+  if (first && alive()) send(first); else if (alive()) ta.focus();
+}
+
+/* ---------------- 设置 ---------------- */
+async function viewSettings() {
+  const s = await api('/api/settings');
+  $('#main').innerHTML = `<h2>设置</h2><p class="sub">配置 AI 使用的模型。保存后立即生效，不需要重启。</p>
+  <form class="card" id="sf" style="max-width:760px"><h3>模型连接</h3>
+    <label>模型名称（Model name）</label><input type="text" name="model" value="${esc(s.model)}" placeholder="${esc(s.env_model || '留空使用默认模型，例如 claude-sonnet-5-5')}" autocomplete="off">
+    <label>API Key ${s.key_set ? `<span class="tag done">已保存 ${esc(s.key_hint)}</span>` : s.env_key ? '<span class="tag info">正在使用容器环境变量里的 Key</span>' : '<span class="tag error">未配置</span>'}</label>
+    <input type="password" name="api_key" placeholder="${s.key_set ? '留空表示不修改' : 'sk-ant-...'}" autocomplete="new-password">
+    ${s.key_set ? '<label style="font-size:13px;color:inherit"><input type="checkbox" name="clear_key"> 清除已保存的 Key</label>' : ''}
+    <label>接口地址（Base URL）</label><input type="text" name="base_url" value="${esc(s.base_url)}" placeholder="${esc(s.env_base_url || '留空使用 Anthropic 官方接口；自建网关或中转填它的地址，如 https://gateway.example.com')}" autocomplete="off">
+    <label>鉴权方式</label><select name="auth_mode">
+      ${[['auto', '自动（官方接口用 x-api-key，自定义地址用 Bearer）'], ['api_key', 'x-api-key（ANTHROPIC_API_KEY）'], ['bearer', 'Bearer Token（ANTHROPIC_AUTH_TOKEN）']].map(([v, l]) => `<option value="${v}" ${s.auth_mode === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <p class="mute">接口地址必须兼容 Anthropic Messages API。Key 保存在服务器的 data/settings.json 里，页面不会回显。</p>
+    <h3 style="margin-top:18px">公司规则</h3>
+    <label>写给 AI 的制单规则与习惯（每次任务都会带上，优先于通用规则）</label>
+    <textarea name="rules" style="min-height:140px" placeholder="例如：\n- 监管方式默认一般贸易(0110)\n- 客户「宁波恒益」的境内货源地固定填 宁波\n- 同一 HS 编码的商品合并申报\n- 品名一律中文在前、英文在后">${esc(s.rules)}</textarea>
+    <div style="margin-top:14px" class="row"><button class="pri fix" name="save">保存</button><button type="button" class="fix" id="test">保存并测试连接</button><span id="smsg"></span></div>
+  </form>
+  <p class="mute" style="max-width:760px">高级：<a href="#" onclick="go('memory');return false">查看和修正 AI 积累的记忆与模板经验</a>（后台自动维护，一般不需要打开）</p>`;
+  const save = async () => { const d = Object.fromEntries(new FormData($('#sf'))); d.clear_key = !!d.clear_key; await api('/api/settings', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(d)}); await loadHealth(); };
+  const say = (t, ok) => { $('#smsg').textContent = t; $('#smsg').style.color = ok === false ? 'var(--bad)' : ok ? 'var(--acc)' : 'inherit'; };
+  $('#sf').onsubmit = async e => { e.preventDefault(); try { await save(); await viewSettings(); say('已保存', true); } catch (err) { say(err.message, false); } };
+  $('#test').onclick = async () => { $('#test').disabled = true; say('正在保存并测试，最多等 90 秒…');
+    try { await save(); const r = await post('/api/settings/test'); say(r.message, r.ok); } catch (err) { say(err.message, false); } $('#test').disabled = false; };
+}
+
+/* ---------------- 记忆与经验 ---------------- */
+async function viewMemory() {
+  const m = await api('/api/memory');
+  const put = body => api('/api/memory', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  $('#main').innerHTML = `<h2>记忆与经验</h2><p class="sub">后台自动维护的内容：AI 记下的要点和确认无误后总结的模板填法。只有发现 AI 记错了、或某个模板的填法过时了，才需要来这里修改或删除。<a href="#" onclick="go('settings');return false">返回设置</a></p>
+  <div class="grid g2">
+    <div class="card"><h3>通用记忆</h3><p class="mute">你在对话或任务里交代过、以后还用得上的话。每次任务都会带上。</p>
+      <textarea id="gen" style="min-height:180px" placeholder="还没有记忆。可以在对话里说「记住：……」，也可以直接写在这里。">${esc(m.general)}</textarea>
+      <div style="margin-top:10px"><button class="pri" id="saveGen">保存</button> <span class="mute" id="genMsg"></span></div></div>
+    <div class="card"><h3>客户备注</h3><p class="mute">某个客户的特殊要求。任务关联到这个客户时带上。</p>
+      <div class="row"><input type="text" id="cname" list="cl" placeholder="客户名" autocomplete="off"><datalist id="cl">${m.customers.map(c => `<option value="${esc(c.name)}">`).join('')}</datalist></div>
+      <textarea id="cnotes" style="min-height:130px;margin-top:8px" placeholder="选择或输入客户名后，在这里写备注。清空并保存即删除。"></textarea>
+      <div style="margin-top:10px"><button class="pri" id="saveCust">保存</button> <span class="mute" id="custMsg">${m.customers.length ? '已有备注：' + m.customers.map(c => esc(c.name)).join('、') : ''}</span></div></div>
+  </div>
+  <div class="card"><h3>模板经验（${m.playbooks.length}）</h3><p class="mute">报关单填制任务点「确认无误」后自动总结。下次遇到同一份模板会直接套用；同一客户换了模板则作为参考。</p>
+    <table><thead><tr><th>客户</th><th>模板</th><th>指纹</th><th>更新时间</th><th>已用</th><th></th></tr></thead><tbody>
+    ${m.playbooks.map((p, i) => `<tr><td>${esc(p.customer || '未指定')}</td><td>${esc(p.template_name)}${p.has_script ? ' <span class="tag plain">含脚本</span>' : ''}</td><td class="mute">${esc(p.fingerprint)}</td><td class="mute">${esc((p.updated || '').replace('T', ' '))}</td><td>${p.uses || 0} 次</td>
+      <td style="white-space:nowrap"><button class="sm" data-view="${i}">查看</button> <button class="sm" data-delpb="${esc(p.id)}">删除</button></td></tr>
+      <tr class="hide" id="pb${i}"><td colspan="6"><div class="log" style="max-height:360px">${esc(p.playbook)}</div></td></tr>`).join('') || '<tr><td colspan="6" class="mute">还没有经验。</td></tr>'}
+    </tbody></table></div>`;
+  $('#saveGen').onclick = async () => { await put({general: $('#gen').value}); $('#genMsg').textContent = '已保存'; };
+  $('#cname').oninput = () => { const c = m.customers.find(x => x.name === $('#cname').value.trim()); $('#cnotes').value = c ? c.notes : ''; };
+  $('#saveCust').onclick = async () => { const n = $('#cname').value.trim(); if (!n) { $('#custMsg').textContent = '请先填客户名'; return; } await put({customer: n, notes: $('#cnotes').value}); await viewMemory(); $('#custMsg').textContent = '已保存：' + n; };
+  $('#main').onclick = async e => { const d = e.target.dataset;
+    if (d.view) $('#pb' + d.view).classList.toggle('hide');
+    else if (d.delpb && confirm('删除这份模板经验？')) { await api('/api/memory/playbooks/' + encodeURIComponent(d.delpb), {method: 'DELETE'}); viewMemory(); } };
+}
+
+loadHealth().then(() => go('dash'));
+</script>
+</body>
+</html>

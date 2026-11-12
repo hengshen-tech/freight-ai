@@ -1,0 +1,5 @@
+# 想让 Agent 多用哪些 Python 库，就一行一个写在这里，然后重新构建镜像：
+#   docker compose up -d --build
+# 例如：
+# pytesseract
+# rapidocr-onnxruntime

@@ -1,0 +1,31 @@
+# 启动：docker compose up -d --build     然后打开 http://localhost:8000 ，到「设置」填模型名 / Key / 接口地址
+services:
+  freight-ai:
+    build: .
+    image: freight-ai:latest
+    container_name: freight-ai
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      TZ: Asia/Shanghai
+      # 以下均可不填，改在网页「设置」里配置（网页里填的优先）
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      # Agent 运行日志：full=工具调用的输入输出都打印（默认） brief=只打印调用了什么 off=关闭
+      AGENT_LOG: ${AGENT_LOG:-full}
+      AGENT_LOG_MAX: ${AGENT_LOG_MAX:-2000}     # 单条输入/输出最多打印多少字符
+      # 独立复核：填制完成后由另一个 Agent 重新核对成品
+      REVIEW: ${REVIEW:-on}                     # on / off
+      REVIEW_AUTOFIX: ${REVIEW_AUTOFIX:-1}      # 复核发现错误时自动改正并重新复核的轮数，0 为不自动改
+      REVIEW_MODEL: ${REVIEW_MODEL:-}           # 复核用的模型，留空则与填表相同
+    volumes:
+      - freight-data:/app/data      # 数据库、任务文件、设置都在这里，删容器不丢
+    logging:
+      options:
+        max-size: "20m"       # 日志滚动，避免撑满磁盘
+        max-file: "5"
+    restart: unless-stopped
+
+volumes:
+  freight-data:
