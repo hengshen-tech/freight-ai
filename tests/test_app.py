@@ -56,7 +56,9 @@ def client(monkeypatch):
                 "verdict": "pass" if good else "fail", "summary": "逐栏核对无误" if good else "合同协议号与合同不符",
                 "checks": [{"item": "合同协议号", "cell": "报关单!H8", "status": "ok" if good else "error",
                             "detail": f"成品 {val}，合同 B3 为 HY-SC-2026-0917"},
-                           {"item": "成交方式", "status": "ok", "detail": "FOB，与发票一致"}]}, ensure_ascii=False), "utf-8")
+                           {"item": "成交方式", "status": "ok", "detail": "FOB，与发票一致"}]
+                + [{"item": item, "status": "ok", "detail": "与样例单证一致"} for item in
+                   ("发货人", "收货人", "商品品名", "数量", "单位", "单价", "总价", "件重")]}, ensure_ascii=False), "utf-8")
             yield AssistantMessage(content=[ToolUseBlock(id="r1", name="Bash", input={"command": "python check.py"})], model="fake")
             yield UserMessage(content=[ToolResultBlock(tool_use_id="r1", content="checked", is_error=False)])
         elif prompt.startswith("独立复核发现下面这些问题"):

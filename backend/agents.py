@@ -354,7 +354,7 @@ def new_job(kind: str, title: str, shipment_id=None, conv: str | None = None, cu
     job = {"id": jid, "kind": kind, "title": title, "shipment_id": shipment_id, "conv": conv, "customer": customer,
            "customer_source": "operator" if customer else "", "customer_basis": "",
            "experience": [], "playbook": None, "review": None, "status": "running",
-           "created": datetime.now().isoformat(timespec="seconds"), "events": [], "result": None,
+           "created": datetime.now().isoformat(timespec="microseconds"), "events": [], "result": None,
            "answer": "", "error": "", "cost_usd": None, "session_id": None, "new_files": []}
     JOBS[jid] = job
     _prepare(workdir(job), with_template=(kind == "chat"))
@@ -674,11 +674,25 @@ async def _review_once(job: dict) -> dict:
         if not isinstance(data, dict) or not isinstance(data.get("checks"), list):
             raise RuntimeError("复核员没有写出合法的 review.json")
         summary = str(data.get("summary") or "")
+        valid_checks = 0
         for c in data["checks"]:
             if isinstance(c, dict) and c.get("item"):
-                st = c.get("status") if c.get("status") in ("ok", "warn", "error") else "warn"
+                valid = (isinstance(c["item"], str) and bool(c["item"].strip())
+                         and c.get("status") in ("ok", "warn", "error")
+                         and isinstance(c.get("detail"), str) and bool(c["detail"].strip()))
+                valid_checks += int(valid)
+                # 明确报错即使缺少说明也必须保留，格式问题不能把错误降级。
+                st = "error" if c.get("status") == "error" else c["status"] if valid else "warn"
                 agent_checks.append({"item": str(c["item"]), "cell": str(c.get("cell") or ""), "status": st,
                                      "detail": str(c.get("detail") or ""), "by": "复核员"})
+        if valid_checks < 10 or valid_checks != len(data["checks"]):
+            agent_checks.append({"item": "复核报告完整性", "cell": "", "status": "warn", "by": "系统",
+                                 "detail": f"报告包含 {valid_checks} 项有效核对，要求至少 10 项且各项格式完整；请人工核对。"})
+        reported = data.get("verdict")
+        if reported != "pass":
+            agent_checks.append({"item": "复核员结论", "cell": "", "by": "复核员",
+                                 "status": "error" if reported == "fail" else "warn",
+                                 "detail": summary if reported in ("warn", "fail") else "复核报告缺少合法结论，请人工核对。"})
     except Exception as e:
         msg = _friendly(str(e))
         _say(job, "FAILED", "复核没有完成：" + msg)

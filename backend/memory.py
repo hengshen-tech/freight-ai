@@ -208,8 +208,10 @@ def save_playbook(*, customer: str, template: Path, output: Path | None, playboo
 
 
 def delete_playbook(pid: str) -> bool:
-    d = PLAYBOOKS / Path(pid).name
-    if d.is_dir() and d.parent == PLAYBOOKS:
+    if not re.fullmatch(r"[0-9a-f]{12}__[\w-]{1,60}", pid):
+        return False
+    d = PLAYBOOKS / pid
+    if not d.is_symlink() and d.is_dir() and d.resolve().parent == PLAYBOOKS.resolve():
         shutil.rmtree(d)
         return True
     return False

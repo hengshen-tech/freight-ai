@@ -139,10 +139,14 @@ async def _store(files, folder: Path) -> list[str]:
             raise HTTPException(400, f"文件过大（上限 25MB）：{f.filename}")
         name = _safe_name(f.filename)
         stem, suf, n = Path(name).stem, Path(name).suffix, 1
-        while name in saved:               # 同一批里重名的文件不互相覆盖
-            n += 1
-            name = f"{stem}_{n}{suf}"
-        (folder / name).write_bytes(data)
+        while True:                       # 包括历史上传；排他创建也避免并发覆盖或跟随符号链接
+            try:
+                with (folder / name).open("xb") as target:
+                    target.write(data)
+                break
+            except FileExistsError:
+                n += 1
+                name = f"{stem}_{n}{suf}"
         saved.append(name)
     return saved
 
@@ -213,7 +217,8 @@ async def create_job(kind: str = Form(...), instructions: str = Form(""), shipme
 
 @app.get("/api/jobs")
 def list_jobs():
-    jobs = [j for j in agents.JOBS.values() if j["kind"] != "chat"]
+    # 时间相同时按插入顺序倒排，兼容旧任务的秒级时间戳。
+    jobs = [j for j in reversed(agents.JOBS.values()) if j["kind"] != "chat"]
     return [agents.public(j, brief=True) for j in sorted(jobs, key=lambda j: j["created"], reverse=True)]
 
 

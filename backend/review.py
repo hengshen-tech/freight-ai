@@ -45,6 +45,7 @@ def precheck(wd: Path, result: dict) -> list[dict]:
     try:
         from openpyxl import load_workbook
         wt, wo = load_workbook(tpl), load_workbook(out)
+        values = load_workbook(out, data_only=True)
     except Exception as e:
         return [_check("成品能否打开", "error", f"成品或模板无法打开：{e}")]
 
@@ -70,10 +71,12 @@ def precheck(wd: Path, result: dict) -> list[dict]:
                         changed.append((f"{ws_t.title}!{c.coordinate}", c.value, o))
                 elif o not in (None, ""):
                     filled += 1
-        for row in ws_o.iter_rows(min_row=1, max_row=ws_o.max_row):
+    # 公式文本用于检查模板；缓存值用于检查计算错误，两者必须分别读取。
+    # 独立扫描所有成品工作表，插行或新增工作表也不能跳过公式错误。
+    for ws_o in values.worksheets:
+        for row in ws_o.iter_rows():
             for c in row:
-                if isinstance(c.value, str) and c.value.startswith("#") and c.value.rstrip("!?").upper() in (
-                        "#REF", "#NAME", "#VALUE", "#DIV/0", "#N/A", "#NUM", "#NULL"):
+                if c.data_type == "e":
                     checks.append(_check("公式错误", "error", f"单元格里是错误值 {c.value}", f"{ws_o.title}!{c.coordinate}"))
     for where, old, new in changed[:8]:
         checks.append(_check("模板原有内容被改动", "error", f"模板里是「{old}」，成品里变成「{new if new not in (None, '') else '空'}」", where))
@@ -105,6 +108,9 @@ def precheck(wd: Path, result: dict) -> list[dict]:
             same += 1
     if claimed:
         checks.append(_check("说明与成品一致", "ok" if same == claimed else "warn", f"说明里列出的 {claimed} 个栏位中，{same} 个与成品实际内容一致"))
+    wt.close()
+    wo.close()
+    values.close()
     return checks
 
 
