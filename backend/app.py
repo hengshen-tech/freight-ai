@@ -182,7 +182,7 @@ async def create_job(kind: str = Form(...), instructions: str = Form(""), shipme
     job = agents.new_job(kind, title, ship["id"] if ship else None, customer=customer)
     wd = agents.workdir(job)
     try:
-        await _store(files, wd / "input")
+        saved = await _store(files, wd / "input")
         if kind == "fill":
             if has_tpl:
                 await _store([template], wd / "template")
@@ -205,6 +205,7 @@ async def create_job(kind: str = Form(...), instructions: str = Form(""), shipme
             extra += "\n操作员的补充要求：\n" + instructions.strip()
         if kind == "fill":      # 同一模板 / 同一客户之前确认正确的做法，直接带进任务目录
             tpl = next((p for p in sorted((wd / "template").iterdir()) if p.is_file()), None)
+            job["output_name"] = agents.fill_output_name(saved[0], tpl.name)
             hits, text = memory.attach(wd, customer, tpl)
             job["experience"] = [{"id": m["id"], "match": m["match"], "customer": m.get("customer", ""),
                                   "template_name": m.get("template_name", "")} for m in hits]
@@ -359,7 +360,7 @@ async def chat(message: str = Form(""), conv: str = Form(...), files: list[Uploa
     if saved:
         prompt += "\n\n（本次上传的文件已保存到 input/：" + "、".join(saved) + "）"
     agents.start(job, prompt, tools=agents.FILE_TOOLS, skills=["xlsx", "customs-declaration"],
-                 use_tms=True, resume=data.get("session_id"), max_turns=60)
+                 use_tms=True, resume=data.get("session_id"))
     return agents.public(job)
 
 

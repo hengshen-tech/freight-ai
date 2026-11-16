@@ -15,7 +15,7 @@ import shutil
 import sys
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +70,7 @@ JOBS_DIR = db.DATA / "jobs"
 CHAT_DIR = db.DATA / "chat"
 JOBS: dict[str, dict] = {}
 FILE_TOOLS = ["Skill", "Read", "Write", "Edit", "Bash", "Glob", "Grep"]
+MAX_AGENT_TURNS = 200
 
 SYSTEM = """你是一家国际货运代理公司的 AI 操作员，熟悉中国进出口报关、单证和货代操作流程。
 - 用简体中文工作和回答，结论先行，简洁。
@@ -119,7 +120,7 @@ PROMPTS = {
 1. 调用 xlsx Skill 和 customs-declaration Skill。
 2. 逐个读取 input/ 下所有文件的全部 sheet，弄清每份是什么单证，提取数据并记下来源单元格。
 3. 读取 template/ 下的模板，定位每个待填单元格（注意合并单元格、明细行区域、已有公式）。
-4. 把模板复制到 output/报关单_已填.xlsx（保留原扩展名），在副本上填写；只写空白待填格，保留模板一切格式与公式。
+4. 把模板复制到指定的 output/{output_name}，在副本上填写；只写空白待填格，保留模板一切格式与公式。
    填表逻辑写成脚本 work/fill.py 再执行（不要用一次性的内联命令），以后同类模板可以复用。
 5. 重新打开输出文件回读核对；模板含公式时按 xlsx Skill 的要求重算并确认无公式错误。
 6. 按 customs-declaration Skill 第四节做单单一致校验。
@@ -335,6 +336,25 @@ def workdir(job: dict) -> Path:
     return CHAT_DIR / job["conv"] if job["kind"] == "chat" else JOBS_DIR / job["id"]
 
 
+def fill_output_name(source_name: str, template_name: str) -> str:
+    """按首份原始单证命名，扩展名沿用模板；时间固定使用北京时间。"""
+    stem = Path(source_name).stem.encode("utf-8")[:180].decode("utf-8", errors="ignore")
+    stamp = datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d_%H%M%S")
+    return f"{stem}_报关单_{stamp}{Path(template_name).suffix}"
+
+
+def _normalize_fill_output(wd: Path, name: str):
+    """兼容旧脚本的固定文件名，并兜底处理未按指定名称生成的单个成品。"""
+    target = wd / "output" / name
+    legacy = target.with_name("报关单_已填" + target.suffix)
+    if legacy.is_file() and legacy != target:
+        legacy.replace(target)
+    elif not target.exists():
+        files = [p for p in target.parent.iterdir() if p.is_file() and p.suffix.lower() == target.suffix.lower()]
+        if len(files) == 1:
+            files[0].replace(target)
+
+
 def _prepare(wd: Path, with_template=False):
     for sub in ("input", "template", "output", "work"):
         (wd / sub).mkdir(parents=True, exist_ok=True)
@@ -476,7 +496,7 @@ def _describe(block: ToolUseBlock) -> str:
     return f"{n} {json.dumps(i, ensure_ascii=False)[:120]}"
 
 
-def _options(wd: Path, *, tools, skills, use_tms=False, resume=None, max_turns=80, chat=False, job=None,
+def _options(wd: Path, *, tools, skills, use_tms=False, resume=None, max_turns=MAX_AGENT_TURNS, chat=False, job=None,
              mem_tools=True, model=None) -> ClaudeAgentOptions:
     system = SYSTEM + (CHAT_EXTRA if chat else "")
     rules = settings.rules().strip()
@@ -518,7 +538,7 @@ def _friendly(msg: str) -> str:
 
 
 async def run_job(job: dict, prompt: str, *, tools: list[str], skills: list[str],
-                  use_tms=False, resume: str | None = None, max_turns=80, hold=False):
+                  use_tms=False, resume: str | None = None, max_turns=MAX_AGENT_TURNS, hold=False):
     """跑一轮 Agent。hold=True 时成功后状态保持 running，由调用方（如复核流程）决定何时结束。"""
     wd, chat = workdir(job), job["kind"] == "chat"
     out_dir = wd / "output"
@@ -591,6 +611,8 @@ async def run_job(job: dict, prompt: str, *, tools: list[str], skills: list[str]
         if os.getenv("AGENT_LOG_TRACEBACK"):
             traceback.print_exc()
     finally:
+        if job["kind"] == "fill" and job.get("output_name"):
+            _normalize_fill_output(wd, job["output_name"])
         after = sorted(p.name for p in out_dir.glob("*") if p.is_file())
         job["new_files"] = [n for n in after if (out_dir / n).stat().st_mtime != before.get(n)]
         if chat:
@@ -616,6 +638,8 @@ async def run_job(job: dict, prompt: str, *, tools: list[str], skills: list[str]
             if not isinstance(result, dict):
                 result = job["result"] or {"summary": job["answer"] if job["status"] == "done" else "", "fields": [], "issues": []}
             result["output_files"] = after
+            if job["kind"] == "fill" and job.get("output_name"):
+                rf.write_text(json.dumps(result, ensure_ascii=False, indent=1), "utf-8")
             job["result"] = result
             # 操作员没指定客户时，采用 Agent 从单证里识别出的客户
             c = result.get("customer")
@@ -651,7 +675,7 @@ async def _review_once(job: dict) -> dict:
     _say(job, "REVIEW", f"开始复核 model={os.getenv('REVIEW_MODEL') or settings.model() or '默认'} 程序校验={review.verdict(checks)}")
     try:
         opts = _options(wd, tools=["Skill", "Read", "Write", "Bash", "Glob", "Grep"], skills=["xlsx", "customs-declaration"],
-                        max_turns=60, job=job, mem_tools=False, model=os.getenv("REVIEW_MODEL") or None)   # 新会话：不带填表过程
+                        job=job, mem_tools=False, model=os.getenv("REVIEW_MODEL") or None)   # 新会话：不带填表过程
         async for msg in query(prompt=REVIEWER, options=opts):
             if isinstance(msg, AssistantMessage):
                 for b in msg.content:
@@ -711,6 +735,9 @@ async def _review_once(job: dict) -> dict:
 
 async def run_fill(job: dict, prompt: str, **kw):
     """报关单填制的完整流程：填表 → 复核 →（发现错误时）改正并再复核一次。"""
+    if job.get("output_name"):
+        prompt = prompt.replace("{output_name}", job["output_name"])
+        prompt += f"\n本任务报关单成品固定保存到 output/{job['output_name']}；追加修改和复用历史脚本时也使用此路径。"
     job["review"] = None
     review_on = REVIEW_ON and settings.configured()
     await run_job(job, prompt, hold=review_on, **kw)
@@ -808,7 +835,7 @@ def learn(job: dict):
     async def run():
         try:
             opts = _options(wd, tools=FILE_TOOLS, skills=["xlsx", "customs-declaration"],
-                            resume=job.get("session_id"), max_turns=30, job=job)
+                            resume=job.get("session_id"), job=job)
             _say(job, "LEARN", "开始总结模板经验（后台）")
             async for msg in query(prompt=prompt, options=opts):
                 if isinstance(msg, AssistantMessage):

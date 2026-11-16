@@ -1,8 +1,10 @@
 import asyncio
 import json
 import logging
+import re
 import shutil
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -164,6 +166,50 @@ def test_upload_validation_creates_no_job(client):
     assert client.post("/api/jobs", data={"kind": "fill"}, files=[("files", ("a.xlsx", b"x"))]).status_code == 400
 
 
+def test_agent_turn_limits(client):
+    STATE["fill_wrong"] = True
+    jid = post_fill(client, customer="轮数测试客户")
+    assert wait(client, jid)["review"]["rounds"] == 1
+    client.post(f"/api/jobs/{jid}/followup", json={"message": "再检查一遍"})
+    wait(client, jid)
+    client.post(f"/api/jobs/{jid}/confirm")
+    wait_learned(client, jid)
+    r = client.post("/api/chat", data={"conv": "cturns-0001", "message": "你好"})
+    wait(client, r.json()["id"])
+    assert len(client.calls) >= 8
+    assert all(c["options"].max_turns == 200 for c in client.calls)
+    client.delete(f"/api/memory/playbooks/{agents.JOBS[jid]['playbook']}")
+
+
+def test_fill_filename_uses_first_upload_and_beijing_time(client):
+    before = datetime.now(timezone(timedelta(hours=8))).replace(microsecond=0)
+    r = client.post("/api/jobs", data={"kind": "fill", "use_sample_template": "true"}, files=[
+        ("files", ("客户乙_订单B.xlsx", (SAMPLES / DOCS[0]).read_bytes())),
+        ("files", ("客户甲_订单A.xlsx", (SAMPLES / DOCS[1]).read_bytes())),
+    ])
+    j = wait(client, r.json()["id"])
+    assert j["status"] == "done"
+    name, = j["result"]["output_files"]
+    match = re.fullmatch(r"客户乙_订单B_报关单_(\d{8}_\d{6})\.xlsx", name)
+    assert match, name
+    stamp = datetime.strptime(match[1], "%Y%m%d_%H%M%S").replace(tzinfo=before.tzinfo)
+    assert before <= stamp <= datetime.now(before.tzinfo)
+    assert client.get(f"/api/jobs/{j['id']}/files/{name}").status_code == 200
+    wd = agents.workdir(agents.JOBS[j["id"]])
+    assert json.loads((wd / "result.json").read_text("utf-8"))["output_files"] == [name]
+    assert f"output/{name}" in client.calls[0]["prompt"]
+    client.post(f"/api/jobs/{j['id']}/followup", json={"message": "重新检查金额"})
+    updated = wait(client, j["id"])
+    assert updated["result"]["output_files"] == [name]
+    assert updated["review"]["verdict"] == "pass"
+
+
+def test_fill_filename_preserves_template_extension_and_limits_length():
+    name = agents.fill_output_name("长" * 80 + ".pdf", "客户模板.xlsm")
+    assert name.endswith(".xlsm") and "_报关单_" in name
+    assert len(name.encode("utf-8")) <= 255
+
+
 def test_fill_followup_confirm_and_reuse(client, caplog):
     records = []
     h = logging.Handler(); h.emit = lambda rec: records.append(rec.getMessage())
@@ -173,14 +219,16 @@ def test_fill_followup_confirm_and_reuse(client, caplog):
         j = wait(client, jid)
     finally:
         agents.log.removeHandler(h)
-    assert j["status"] == "done" and j["result"]["output_files"] == ["报关单_已填.xlsx"] and j["experience"] == []
+    assert j["status"] == "done" and j["experience"] == []
+    name, = j["result"]["output_files"]
+    assert re.fullmatch(r"样例_商业发票_报关单_\d{8}_\d{6}\.xlsx", name)
     rv = j["review"]
     assert rv["verdict"] == "pass" and rv["rounds"] == 0 and STATE["fixes"] == 0
     assert any(c["by"] == "复核员" and c["item"] == "合同协议号" for c in rv["checks"])
     assert any(c["by"] == "程序校验" and c["item"] == "模板原有内容" and c["status"] == "ok" for c in rv["checks"])
     assert any(e["kind"] == "review" for e in j["events"])
     assert j["result"]["fields"][0]["cell"] == "报关单!H8" and j["customer"] == "宁波恒益电器"
-    assert client.get(f"/api/jobs/{jid}/files/报关单_已填.xlsx").status_code == 200
+    assert client.get(f"/api/jobs/{jid}/files/{name}").status_code == 200
     assert client.get(f"/api/jobs/{jid}/files/..%2Fjob.json").status_code == 404
     # 日志：开始、提示词、工具输入、工具输出、报错、结束
     text = "\n".join(records)
@@ -328,7 +376,7 @@ def test_review_catches_error_and_fill_agent_fixes_it(client):
     fix = next(c for c in client.calls if c["prompt"].startswith("独立复核发现下面这些问题"))
     assert "合同协议号" in fix["prompt"] and fix["options"].resume == "sess-1"      # 交回同一个填表会话改
     from openpyxl import load_workbook
-    out = agents.workdir(agents.JOBS[j["id"]]) / "output" / "报关单_已填.xlsx"
+    out = agents.workdir(agents.JOBS[j["id"]]) / "output" / j["result"]["output_files"][0]
     assert load_workbook(out).active["H8"].value == "HY-SC-2026-0917"
 
 
@@ -337,9 +385,9 @@ def test_reviewer_cannot_change_the_output(client):
     j = wait(client, post_fill(client, customer="只读客户"))
     out_dir = agents.workdir(agents.JOBS[j["id"]]) / "output"
     from openpyxl import load_workbook
-    assert load_workbook(out_dir / "报关单_已填.xlsx").active["H8"].value == "HY-SC-2026-0917"   # 已恢复
-    assert [p.name for p in out_dir.iterdir()] == ["报关单_已填.xlsx"]
-    assert j["result"]["output_files"] == ["报关单_已填.xlsx"]
+    name, = j["result"]["output_files"]
+    assert load_workbook(out_dir / name).active["H8"].value == "HY-SC-2026-0917"   # 已恢复
+    assert [p.name for p in out_dir.iterdir()] == [name]
 
 
 def test_precheck_flags_template_damage_and_false_claims(tmp_path):
