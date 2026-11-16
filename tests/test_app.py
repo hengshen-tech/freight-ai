@@ -60,7 +60,7 @@ def client(monkeypatch):
                             "detail": f"成品 {val}，合同 B3 为 HY-SC-2026-0917"},
                            {"item": "成交方式", "status": "ok", "detail": "FOB，与发票一致"}]
                 + [{"item": item, "status": "ok", "detail": "与样例单证一致"} for item in
-                   ("关键字段", "商品明细", "金额", "件数重量", "文件可用性")]}, ensure_ascii=False), "utf-8")
+                   ("发货人", "收货人", "商品品名", "数量", "单位", "单价", "总价", "件重")]}, ensure_ascii=False), "utf-8")
             yield AssistantMessage(content=[ToolUseBlock(id="r1", name="Bash", input={"command": "python check.py"})], model="fake")
             yield UserMessage(content=[ToolResultBlock(tool_use_id="r1", content="checked", is_error=False)])
         elif prompt.startswith("独立复核发现下面这些问题"):
@@ -179,20 +179,6 @@ def test_agent_turn_limits(client):
     assert len(client.calls) >= 8
     assert all(c["options"].max_turns == 200 for c in client.calls)
     client.delete(f"/api/memory/playbooks/{agents.JOBS[jid]['playbook']}")
-
-
-def test_core_review_receives_operator_requirements(client):
-    r = client.post("/api/jobs", data={"kind": "fill", "use_sample_template": "true",
-                    "instructions": "合同号保留 HY 前缀"},
-                    files=[("files", (DOCS[0], (SAMPLES / DOCS[0]).read_bytes()))])
-    jid = r.json()["id"]
-    assert wait(client, jid)["status"] == "done"
-    client.post(f"/api/jobs/{jid}/followup", json={"message": "重量保留三位小数"})
-    assert wait(client, jid)["status"] == "done"
-    prompts = [c["prompt"] for c in client.calls if c["prompt"].startswith("你是报关单复核员")]
-    assert len(prompts) == 2
-    assert "合同号保留 HY 前缀" in prompts[0] and "合同号保留 HY 前缀" in prompts[1]
-    assert "重量保留三位小数" in prompts[1]
 
 
 def test_fill_filename_uses_first_upload_and_beijing_time(client):

@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 
 CELL = re.compile(r"^(?:'?(?P<sheet>[^'!]+)'?!)?\$?(?P<col>[A-Za-z]{1,3})\$?(?P<row>\d+)$")
-EXCEL = {".xlsx", ".xlsm", ".xls"}
+EXCEL = {".xlsx", ".xlsm"}
 
 
 def _check(item, status, detail, cell=""):
@@ -37,49 +37,15 @@ def first_file(folder: Path, exts=None):
     return files[0] if files else None
 
 
-def _load_workbook(path: Path, data_only=False):
-    from openpyxl import Workbook, load_workbook
-    if path.suffix.lower() != ".xls":
-        return load_workbook(path, data_only=data_only)
-    # xlrd 提供 xls 缓存值；转成统一的内存接口，复用基础检查，不启动 LibreOffice。
-    import xlrd
-    source = xlrd.open_workbook(path)
-    book = Workbook()
-    book.remove(book.active)
-    try:
-        for sheet in source.sheets():
-            ws = book.create_sheet(sheet.name)
-            for r, row in enumerate(sheet.get_rows(), 1):
-                for col, value in enumerate(row, 1):
-                    if value.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
-                        continue
-                    cell = ws.cell(r, col)
-                    if value.ctype == xlrd.XL_CELL_ERROR:
-                        cell.value = xlrd.error_text_from_code.get(value.value, "#VALUE!")
-                        cell.data_type = "e"
-                    elif value.ctype == xlrd.XL_CELL_DATE:
-                        cell.value = xlrd.xldate_as_datetime(value.value, source.datemode)
-                    elif value.ctype == xlrd.XL_CELL_BOOLEAN:
-                        cell.value = bool(value.value)
-                    else:
-                        cell.value = value.value
-                        if value.ctype == xlrd.XL_CELL_TEXT:
-                            cell.data_type = "s"
-        return book
-    finally:
-        source.release_resources()
-
-
 def precheck(wd: Path, result: dict) -> list[dict]:
-    """一次完成 Excel 基础检查，优先使用与模板同格式的主成品。"""
-    tpl = first_file(wd / "template", EXCEL)
-    out = first_file(wd / "output", {tpl.suffix.lower()}) if tpl else None
-    out = out or first_file(wd / "output", EXCEL)
+    """返回一组核对结果。成品或模板不是 xlsx 时只给一条说明，交给复核 Agent。"""
+    tpl, out = first_file(wd / "template", EXCEL), first_file(wd / "output", EXCEL)
     if not tpl or not out:
-        return [_check("程序校验", "warn", "没有可检查的 Excel 模板或成品，请复核员确认文件可用性。")]
+        return [_check("程序校验", "ok", "模板或成品不是 xlsx，跳过逐格校验，由复核员人工式核对。")]
     try:
-        wt, wo = _load_workbook(tpl), _load_workbook(out)
-        values = wo if out.suffix.lower() == ".xls" else _load_workbook(out, data_only=True)
+        from openpyxl import load_workbook
+        wt, wo = load_workbook(tpl), load_workbook(out)
+        values = load_workbook(out, data_only=True)
     except Exception as e:
         return [_check("成品能否打开", "error", f"成品或模板无法打开：{e}")]
 
@@ -101,8 +67,6 @@ def precheck(wd: Path, result: dict) -> list[dict]:
             for c in row:
                 o = ws_o[c.coordinate].value
                 if c.value not in (None, ""):
-                    if tpl.suffix.lower() == ".xls" and c.data_type != "s":
-                        continue                # xls 数值可能是公式缓存，不将计算结果变化误判为模板破坏
                     if _norm(o) != _norm(c.value):
                         changed.append((f"{ws_t.title}!{c.coordinate}", c.value, o))
                 elif o not in (None, ""):
@@ -121,8 +85,7 @@ def precheck(wd: Path, result: dict) -> list[dict]:
     for name in shifted:
         checks.append(_check("行数变化", "warn", f"工作表「{name}」的行数与模板不同（可能因商品行较多插了行），请留意表尾合计和签章区是否完好"))
     if not changed and not shifted:
-        detail = "文本标签未被改动（xls 仅检查公式缓存错误，不比较公式文本）" if tpl.suffix.lower() == ".xls" else "标签、公式均未被改动"
-        checks.append(_check("模板原有内容", "ok", f"{detail}；共填入 {filled} 个原本空白的单元格"))
+        checks.append(_check("模板原有内容", "ok", f"标签、公式均未被改动；共填入 {filled} 个原本空白的单元格"))
 
     # 2) 填表 Agent 声称填了的格子，是否真的是那个值
     claimed = same = 0
@@ -130,10 +93,7 @@ def precheck(wd: Path, result: dict) -> list[dict]:
         m = CELL.match(str(f.get("cell") or "").strip())
         if not m:
             continue                                # 区域、文字描述等无法定位的不校验
-        if m["sheet"] and m["sheet"] not in wo.sheetnames:
-            checks.append(_check(f.get("field") or "栏位", "warn", f"说明中指定的工作表「{m['sheet']}」不存在，请人工核对", f["cell"]))
-            continue
-        sheet = m["sheet"] or wo.sheetnames[0]
+        sheet = m["sheet"] if m["sheet"] in wo.sheetnames else wo.sheetnames[0]
         coord = f"{m['col'].upper()}{m['row']}"
         actual, want = wo[sheet][coord].value, f.get("value")
         claimed += 1

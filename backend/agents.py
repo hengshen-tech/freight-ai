@@ -34,7 +34,6 @@ from . import db, memory, review, settings
 # REVIEW_MODEL=...       复核用的模型，不填则与填表相同；换一个模型复核，独立性更强
 REVIEW_ON = os.getenv("REVIEW", "on").lower() not in ("off", "0", "false", "no")
 REVIEW_AUTOFIX = int(os.getenv("REVIEW_AUTOFIX", "1") or 0)
-REVIEW_ITEMS = ("关键字段", "商品明细", "金额", "件数重量", "文件可用性")
 LOG_MODE = os.getenv("AGENT_LOG", "full").lower()
 LOG_MAX = int(os.getenv("AGENT_LOG_MAX", "2000") or 2000)
 log = logging.getLogger("agent")
@@ -171,36 +170,28 @@ REVIEWER = """你是报关单复核员，和填表的同事相互独立：你没
 - output/     填好的成品（待复核）
 - result.json 填表同事自己写的说明。那只是他的说法，不能当作依据；只可以用来了解他填了哪些格子。
 
-只做以下五类核心检查，checks 的 item 必须分别使用这些名称：
-- 关键字段：本单据适用的客户、收发货人、合同号、发票号、日期、币种、成交方式及运保费与原始单证一致；必要栏位没有无故留空，没有编造数据。
-- 商品明细：逐行核对品名、规格、数量、单位，无漏行、重复或错位；数量多时也要批量核对全部行。
-- 金额：实际计算数量×单价、行金额及总金额，按单据精度核对舍入差异。
-- 件数重量：总件数、毛重、净重及明细合计与原始单证一致，净重不大于毛重。
-- 文件可用性：成品能打开、工作表完整、关键标签和公式正常、没有公式错误。
-
-执行方式和结束条件：
-1. 调用 xlsx Skill 和 customs-declaration Skill，仅使用与上述核心检查有关的规则。任务目标是快速复核，不执行完整审单或重新制单。
-2. 先用 Write 写 review.json 检查清单：五类各一项，未完成的项设为 warn、detail 写“尚未检查”，verdict 为 warn。
-3. 集中读取 input/、template/ 和 output/，独立确认原始单证的取数位置和成品对应区域。
-   result.json 仅用于了解已填格子，不作为正确性的依据；不要读取 job.json、填表脚本 work/fill.py 或历史执行过程。
-4. 把全部明细、金额和件重校验合并到 work/review/check.py，一次批量执行，输出合计、差异数量和差异位置，避免重复打开文件、逐列逐项调用工具。
-   公司规则、客户要求只核对与五类核心检查有关的部分。来源矛盾或信息不足时标 warn，写明原因和待确认内容，停止追查该项。
-5. 每完成一类检查，累积更新 review.json，保留此前所有差异。尽量在 10～20 轮内完成，这是执行目标，不强制中断；五类都有结论后立即结束。
-   不主动重译品名、推断材质用途或 HS 归类，不扩展检查文档属性、页眉页脚、列宽、隐藏行列等细节。操作员在本任务中明确要求时才额外检查。
-   多个格式版本以原模板格式的成品为主，其余版本仅核对核心数据一致性；确有必要时在副本上转换或重算一次，复用已有结果。
-6. 严禁修改 input/、template/、output/ 下的文件。重算或试验只在 work/review/ 的副本上操作。
-
-review.json 使用以下结构（UTF-8 合法 JSON，不要包在 markdown 里）：
+步骤：
+1. 调用 xlsx Skill 和 customs-declaration Skill。
+2. 自己从 input/ 的单证里重新取数，不要沿用 result.json 里的值。金额、数量、件数、重量要实际计算。
+3. 打开 output/ 里的成品逐栏核对：
+   - 每个已填栏位的值是否与单证一致、是否填对了位置；
+   - 必填栏位有没有漏填；留空是否有合理原因（单证里确实没有）；
+   - 商品明细的行数、品名、数量、单位、单价、总价、币制以及合计；
+   - 成交方式与运费、保费的逻辑；件数、毛重、净重与箱单合计；
+   - 是否违反公司规则、长期记忆或客户备注里的要求；
+   - 有没有编造单证里没有的内容（HS 编码、信用代码、船名航次、金额）。
+4. 严禁修改 input/、template/、output/ 下的任何文件。需要重算公式或做试验时，先把文件复制到 work/review/ 再操作。
+5. 用 Write 在当前目录写出 review.json（合法 JSON，不要包在 markdown 里）：
 {
   "verdict": "pass|warn|fail",
   "summary": "一两句话的复核结论",
   "checks": [
-    {"item": "关键字段|商品明细|金额|件数重量|文件可用性", "cell": "涉及的单元格或区域，没有就留空", "status": "ok|warn|error", "detail": "检查范围、成品与原始单证的比较结果及出处"}
+    {"item": "核对项", "cell": "报关单!C3（没有就留空）", "status": "ok|warn|error", "detail": "成品里的值、单证里的值及出处"}
   ]
 }
-五类各给一项结论即可；有多处错误时在对应 detail 中列出，必要时增加差异项。不适用的类别写 ok 并说明依据；尚未检查或无法确认的类别必须写 warn。
-error = 确认有错；warn = 未检查、信息不足或需人工确认；ok = 核对无误。有 error 时 verdict 为 fail，否则有 warn 为 warn，全部核心检查通过才为 pass。
-最后用一句话说结论。"""
+   error = 会导致申报错误或退单；warn = 需要人工确认；ok = 核对无误。核对无误的主要栏位也要列出来（至少 10 项），证明你确实核对过。
+   不要为了显得严格而把没有问题的地方标成 error；也不要因为填表同事的说明看起来合理就放过。
+6. 最后用一句话说结论。"""
 
 FIX = """独立复核发现下面这些问题。请逐条核实：确实错了就改正 output/ 里的成品并回读核对；如果你认为复核意见不成立，保持原样，并在 result.json 的 issues 里写明理由。改完后按原结构更新 result.json。
 
@@ -682,16 +673,10 @@ async def _review_once(job: dict) -> dict:
     summary, agent_checks, names = "", [], {}
     emit("复核员开始独立核对成品")
     _say(job, "REVIEW", f"开始复核 model={os.getenv('REVIEW_MODEL') or settings.model() or '默认'} 程序校验={review.verdict(checks)}")
-    review_prompt = REVIEWER + "\n\n系统已完成的基础程序检查（可复用，业务数据仍须独立取数核对）：\n" + json.dumps(checks, ensure_ascii=False)
-    # 单独传递操作员要求；兼容旧任务，没有 instructions 时使用原始任务说明。
-    requirements = [job.get("instructions", job.get("prompt", ""))]
-    requirements += [e["text"] for e in job.get("events", []) if e.get("kind") == "user"]
-    if any(requirements):
-        review_prompt += "\n\n本任务操作员的要求（后续要求优先；仅核对结果，不执行填表）：\n" + "\n".join(filter(None, requirements))
     try:
         opts = _options(wd, tools=["Skill", "Read", "Write", "Bash", "Glob", "Grep"], skills=["xlsx", "customs-declaration"],
                         job=job, mem_tools=False, model=os.getenv("REVIEW_MODEL") or None)   # 新会话：不带填表过程
-        async for msg in query(prompt=review_prompt, options=opts):
+        async for msg in query(prompt=REVIEWER, options=opts):
             if isinstance(msg, AssistantMessage):
                 for b in msg.content:
                     if isinstance(b, ToolUseBlock):
@@ -709,38 +694,24 @@ async def _review_once(job: dict) -> dict:
                 job["cost_usd"] = (job["cost_usd"] or 0) + (msg.total_cost_usd or 0)
                 if msg.is_error:
                     raise RuntimeError(msg.result or msg.subtype)
-
-    except Exception as e:
-        run_error = _friendly(str(e))
-    else:
-        run_error = ""
-    if run_error:
-        _say(job, "FAILED", "复核没有完成：" + run_error)
-        checks.append({"item": "独立复核", "status": "warn", "cell": "", "by": "系统",
-                       "detail": "复核未完成，已保留现有检查结果，未完成部分请人工核对。原因：" + run_error})
-    try:
         data = json.loads(rf.read_text("utf-8")) if rf.exists() else None
         if not isinstance(data, dict) or not isinstance(data.get("checks"), list):
             raise RuntimeError("复核员没有写出合法的 review.json")
         summary = str(data.get("summary") or "")
-        valid_checks, covered = 0, set()
+        valid_checks = 0
         for c in data["checks"]:
             if isinstance(c, dict) and c.get("item"):
                 valid = (isinstance(c["item"], str) and bool(c["item"].strip())
                          and c.get("status") in ("ok", "warn", "error")
                          and isinstance(c.get("detail"), str) and bool(c["detail"].strip()))
                 valid_checks += int(valid)
-                if valid:
-                    covered.add(c["item"])
                 # 明确报错即使缺少说明也必须保留，格式问题不能把错误降级。
                 st = "error" if c.get("status") == "error" else c["status"] if valid else "warn"
                 agent_checks.append({"item": str(c["item"]), "cell": str(c.get("cell") or ""), "status": st,
                                      "detail": str(c.get("detail") or ""), "by": "复核员"})
-        missing = [item for item in REVIEW_ITEMS if item not in covered]
-        if missing or valid_checks != len(data["checks"]):
-            detail = "缺少核心检查：" + "、".join(missing) if missing else "报告中有格式不完整的检查项"
+        if valid_checks < 10 or valid_checks != len(data["checks"]):
             agent_checks.append({"item": "复核报告完整性", "cell": "", "status": "warn", "by": "系统",
-                                 "detail": detail + "；请人工核对。"})
+                                 "detail": f"报告包含 {valid_checks} 项有效核对，要求至少 10 项且各项格式完整；请人工核对。"})
         reported = data.get("verdict")
         if reported != "pass":
             agent_checks.append({"item": "复核员结论", "cell": "", "by": "复核员",
@@ -748,11 +719,9 @@ async def _review_once(job: dict) -> dict:
                                  "detail": summary if reported in ("warn", "fail") else "复核报告缺少合法结论，请人工核对。"})
     except Exception as e:
         msg = _friendly(str(e))
-        _say(job, "FAILED", "复核报告没有完成：" + msg)
-        checks.append({"item": "复核报告", "status": "warn", "cell": "", "by": "系统",
-                       "detail": "没有可用的完整复核报告，请人工核对。原因：" + msg})
-    if run_error:
-        summary = "复核未完成：" + run_error + "。" + (summary or "请人工核对未完成部分。")
+        _say(job, "FAILED", "复核没有完成：" + msg)
+        checks.append({"item": "独立复核", "status": "warn", "cell": "", "by": "系统",
+                       "detail": "复核 Agent 没有完成，本次只做了程序校验，请人工仔细核对。原因：" + msg})
     touched = review.restore_if_changed(wd, hashes)
     if touched:
         _say(job, "REVIEW", "复核期间成品被改动，已恢复原样：" + "、".join(touched))
