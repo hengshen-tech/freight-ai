@@ -53,6 +53,7 @@ td{padding:10px 8px;border-bottom:1px solid var(--line2);vertical-align:top}tr:l
 .log .review{color:#c9b3e6}.log .tool{color:#9fcdbd}.log .error,.log .result{color:#f0a594}.log .user{color:#e9c27c}.log .t{color:#7d796c;margin-right:8px}
 .drop{border:1.5px dashed #cfc9b8;border-radius:12px;padding:18px;text-align:center;color:var(--ink2);background:#fbfaf5;cursor:pointer;transition:border-color .15s,background .15s}
 .drop:hover{border-color:var(--acc);background:#fff}.drop.has{border-style:solid;border-color:var(--ok);background:var(--ok-soft);color:var(--ink);text-align:left}
+.picked-file{display:flex;align-items:center;gap:10px;margin-top:6px}.picked-file span{flex:1;min-width:0;overflow-wrap:anywhere}.picked-file button{flex:none}
 .todo{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line2);align-items:flex-start}.todo:last-child{border:0}.todo input{margin-top:4px;accent-color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chips button{font-size:12px;border-radius:16px;padding:4px 12px;color:var(--ink2)}
 .banner{background:var(--warn-soft);color:#5e3d05;border:1px solid #ecd9a8;border-radius:12px;padding:11px 16px;margin-bottom:18px}
@@ -212,7 +213,7 @@ async function viewJobForm(kind, shipId) {
   <p class="sub">${fill ? '上传客户发来的发票、箱单、合同等 Excel，再给一份报关模板。Agent 用 xlsx Skill 读取所有文件、把数据填进模板，并逐项标注来源和把握程度。'
     : '上传一套单证，Agent 实际计算并交叉核对金额、数量、件数、重量、抬头、条款，列出所有不一致。'}</p>
   <form class="card" id="jf"><div class="grid g2">
-    <div><h3>1. 原始单证（可多选）</h3><div class="drop" id="dFiles">点击选择文件，或把文件拖到这里<br><span class="mute">xlsx / xls / csv / pdf / 图片</span></div><input type="file" id="files" multiple hidden>
+    <div><h3>1. 原始单证（可多选、分批添加）</h3><div class="drop" id="dFiles">点击选择文件，或把文件拖到这里<br><span class="mute">支持继续添加 · xlsx / xls / csv / pdf / 图片</span></div><input type="file" id="files" multiple hidden>
       ${fill ? `<h3 style="margin-top:16px">2. 报关模板</h3><div class="drop" id="dTpl">点击选择要填写的模板 Excel</div><input type="file" id="tpl" hidden accept=".xlsx,.xlsm,.xls">
       ${health.sample_template ? '<label style="font-size:13px;color:inherit"><input type="checkbox" id="useSample"> 没有模板？先用内置的示例报关单模板</label>' : ''}` : ''}
     </div>
@@ -224,18 +225,38 @@ async function viewJobForm(kind, shipId) {
     </div></div></form>
   <p class="mute">想先试试？项目的 samples/ 目录里有一套虚构的样例发票、箱单、合同。</p>`;
   const bind = (drop, input, multi) => {
-    const show = () => { const fs = [...input.files]; drop.classList.toggle('has', !!fs.length); if (fs.length) drop.innerHTML = fs.map(f => '· ' + esc(f.name)).join('<br>'); };
-    drop.onclick = () => input.click(); input.onchange = show;
+    let picked = [];
+    const empty = drop.innerHTML;
+    const show = () => {
+      drop.classList.toggle('has', !!picked.length);
+      drop.innerHTML = picked.length ? `<div class="mute">已选择 ${picked.length} 个文件 · ${multi ? '点击或拖入可继续添加' : '点击或拖入可更换模板'}</div>`
+        + picked.map((f, i) => `<div class="picked-file"><span>${esc(f.name)}</span><button type="button" class="sm" data-remove-file="${i}" aria-label="移除 ${esc(f.name)}">移除</button></div>`).join('') : empty;
+    };
+    const add = files => {
+      const incoming = [...files];
+      if (!incoming.length) return;
+      if (!multi) picked = incoming.slice(0, 1);
+      else for (const f of incoming) if (!picked.some(p => p.name === f.name && p.size === f.size && p.lastModified === f.lastModified)) picked.push(f);
+      show();
+    };
+    drop.onclick = e => {
+      const remove = e.target.closest('[data-remove-file]');
+      if (remove) { e.preventDefault(); e.stopPropagation(); picked.splice(Number(remove.dataset.removeFile), 1); show(); }
+      else input.click();
+    };
+    input.onchange = () => { add(input.files); input.value = ''; };
     drop.ondragover = e => e.preventDefault();
-    drop.ondrop = e => { e.preventDefault(); const dt = new DataTransfer(); [...e.dataTransfer.files].slice(0, multi ? 99 : 1).forEach(f => dt.items.add(f)); input.files = dt.files; show(); };
+    drop.ondrop = e => { e.preventDefault(); add(e.dataTransfer.files); };
+    return () => [...picked];
   };
-  bind($('#dFiles'), $('#files'), true); if (fill) bind($('#dTpl'), $('#tpl'), false);
+  const files = bind($('#dFiles'), $('#files'), true);
+  const templates = fill ? bind($('#dTpl'), $('#tpl'), false) : () => [];
   if (fill) { const sync = () => { const sh = shipments.find(x => String(x.id) === $('#ship').value); if (sh && sh.customer) $('#cust').value = sh.customer; }; $('#ship').onchange = sync; sync(); }
   $('#jf').onsubmit = async e => {
     e.preventDefault(); const fd = new FormData(); fd.append('kind', kind); fd.append('instructions', $('#ins').value);
     if ($('#ship').value) fd.append('shipment_id', $('#ship').value);
-    [...$('#files').files].forEach(f => fd.append('files', f));
-    if (fill) { fd.append('customer', $('#cust').value); if ($('#tpl').files[0]) fd.append('template', $('#tpl').files[0]); if ($('#useSample')?.checked) fd.append('use_sample_template', 'true'); }
+    files().forEach(f => fd.append('files', f));
+    if (fill) { fd.append('customer', $('#cust').value); if (templates()[0]) fd.append('template', templates()[0]); if ($('#useSample')?.checked) fd.append('use_sample_template', 'true'); }
     $('#go').disabled = true;
     try { const j = await api('/api/jobs', {method: 'POST', body: fd}); go('job', j.id); }
     catch (err) { $('#err').innerHTML = esc(err.message) + (/Key/.test(err.message) ? ' <a href="#" onclick="go(\'settings\');return false">去设置</a>' : ''); $('#go').disabled = false; }

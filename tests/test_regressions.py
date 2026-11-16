@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import shutil
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -13,6 +14,9 @@ from openpyxl import Workbook, load_workbook
 
 from backend import agents, memory, review
 from backend.app import app, _store
+
+CORE_CHECKS = [{"item": item, "status": "ok", "detail": "与原始单证一致，已核对全部适用数据"}
+               for item in ("关键字段", "商品明细", "金额", "件数重量", "文件可用性")]
 
 
 @pytest.fixture
@@ -79,6 +83,34 @@ def test_precheck_detects_cached_formula_errors(tmp_path, insert_row):
     assert any(c["status"] == "error" and c["cell"] == "Sheet!A1" for c in checks)
 
 
+@pytest.mark.parametrize("case, expected", [
+    ("valid", "ok"), ("label", "error"), ("empty_field", "error"),
+    ("missing_sheet", "warn"), ("formula_error", "error"), ("corrupt", "error"),
+])
+def test_xls_core_precheck(tmp_path, case, expected):
+    fixtures = Path(__file__).parent / "fixtures"
+    for folder in ("template", "output"):
+        (tmp_path / folder).mkdir()
+        shutil.copy(fixtures / "core.xls", tmp_path / folder / "core.xls")
+    out = tmp_path / "output" / "core.xls"
+    cell = "Missing!B2" if case == "missing_sheet" else "Main!C2" if case == "empty_field" else "Main!B2"
+    result = {"fields": [{"field": "字段", "cell": cell, "value": "VALUE"}]}
+    if case == "label":
+        data = out.read_bytes()
+        assert b"LABEL" in data
+        out.write_bytes(data.replace(b"LABEL", b"BROKE"))
+    elif case == "formula_error":
+        shutil.copy(fixtures / "formula_error.xls", out)
+    elif case == "corrupt":
+        out.write_bytes(b"broken")
+    # 附带的 xlsx 版本不能取代与模板同格式的主成品。
+    Workbook().save(tmp_path / "output" / "a_companion.xlsx")
+    checks = review.precheck(tmp_path, result)
+    assert review.verdict(checks) == ("pass" if expected == "ok" else "fail" if expected == "error" else "warn")
+    assert any(c["status"] == expected for c in checks)
+    assert not any("跳过" in c["detail"] for c in checks)
+
+
 @pytest.mark.parametrize("verdict, checks, expected", [
     ("pass", [], "warn"),
     ("pass", [None, {}, {"item": "无明细"}], "warn"),
@@ -88,7 +120,10 @@ def test_precheck_detects_cached_formula_errors(tmp_path, insert_row):
     ("fail", [{"item": str(i), "status": "ok", "detail": "一致"} for i in range(10)], "fail"),
     ("warn", [{"item": str(i), "status": "ok", "detail": "一致"} for i in range(10)], "warn"),
     ("unknown", [{"item": str(i), "status": "ok", "detail": "一致"} for i in range(10)], "warn"),
-    ("pass", [{"item": str(i), "status": "ok", "detail": "一致"} for i in range(10)], "pass"),
+    ("pass", [{"item": str(i), "status": "ok", "detail": "一致"} for i in range(10)], "warn"),
+    ("pass", CORE_CHECKS, "pass"),
+    ("pass", CORE_CHECKS[:-1], "warn"),
+    ("pass", [CORE_CHECKS[0]] * 10, "warn"),
 ])
 def test_review_requires_complete_checks_and_honors_verdict(client, monkeypatch, verdict, checks, expected):
     job = agents.new_job("fill", "review regression")
@@ -108,6 +143,42 @@ def test_review_requires_complete_checks_and_honors_verdict(client, monkeypatch,
     monkeypatch.setattr(agents, "query", report)
     rv = asyncio.run(agents._review_once(job))
     assert rv["verdict"] == expected
+    job["status"] = "done"
+    agents._save(job)
+
+
+@pytest.mark.parametrize("interruption", ["sdk_error", "turn_limit"])
+def test_interrupted_review_preserves_findings_and_restores_output(client, monkeypatch, interruption):
+    job = agents.new_job("fill", "partial core review")
+    wd = agents.workdir(job)
+    out = wd / "output" / "keep.txt"
+    out.write_text("original")
+    closed = []
+
+    async def interrupted(*, prompt, options):
+        assert options.max_turns == 200
+        out.write_text("tampered")
+        (wd / "output" / "extra.txt").write_text("extra")
+        (wd / "review.json").write_text(json.dumps({
+            "verdict": "fail", "summary": "已确认金额不一致",
+            "checks": [{"item": "金额", "status": "error", "detail": "成品100，原始发票200"}],
+        }))
+        try:
+            if interruption == "sdk_error":
+                raise RuntimeError("connection lost")
+            yield ResultMessage(subtype="error_max_turns", duration_ms=1, duration_api_ms=1,
+                                is_error=True, num_turns=200, session_id="partial", result="error_max_turns")
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(agents, "query", interrupted)
+    rv = asyncio.run(agents._review_once(job))
+    assert rv["verdict"] == "fail"
+    assert any(c["item"] == "金额" and c["status"] == "error" for c in rv["checks"])
+    assert any(c["item"] == "独立复核" and c["status"] == "warn" for c in rv["checks"])
+    assert any(c["item"] == "复核报告完整性" and "关键字段" in c["detail"] for c in rv["checks"])
+    assert closed and out.read_text() == "original"
+    assert not (wd / "output" / "extra.txt").exists()
     job["status"] = "done"
     agents._save(job)
 

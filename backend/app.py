@@ -180,6 +180,7 @@ async def create_job(kind: str = Form(...), instructions: str = Form(""), shipme
     title += f" · {ship['ref']}" if ship else (f" · {instructions.strip()[:16]}" if kind == "hs" else f" · {names[0]}")
     customer = customer.strip() or (ship or {}).get("customer") or ""
     job = agents.new_job(kind, title, ship["id"] if ship else None, customer=customer)
+    job["instructions"] = instructions.strip()
     wd = agents.workdir(job)
     try:
         saved = await _store(files, wd / "input")
